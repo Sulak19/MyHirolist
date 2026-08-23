@@ -12,6 +12,8 @@ import {
   shoppingNeeds,
   reconcileShopping,
   prepTasks,
+  splitPrepNote,
+  reconcilePrep,
 } from "./planner.js";
 
 const NOW = new Date(2026, 7, 26, 12).getTime();
@@ -263,8 +265,8 @@ test("prep groups the same ingredient across meals into one job", () => {
   const onions = tasks.find((t) => t.label.includes("onions"));
 
   assert.ok(onions, "expected an onions task");
-  assert.match(onions.label, /Hamburg/);
-  assert.match(onions.label, /Korean pancakes/);
+  assert.match(onions.meal, /Hamburg/);
+  assert.match(onions.meal, /Korean pancakes/);
   assert.equal(tasks.filter((t) => t.label.includes("onions")).length, 1, "one chopping job, not two");
 });
 
@@ -395,12 +397,51 @@ test("next week is only prepped when the meal actually freezes", () => {
 
   assert.equal(tasks.length, 1);
   assert.match(tasks[0].label, /freeze flat/);
-  assert.match(tasks[0].label, /cook ahead & freeze for next week/);
+  assert.equal(tasks[0].week, "next");
 });
 
 test("this week's prep is not labelled as cook-ahead", () => {
   const meals = [{ id: "m", name: "Hamburg", ingredients: ["beef mince"], prepNotes: "Form patties and freeze." }];
   const tasks = prepTasks({ Monday: "m" }, {}, meals, []);
-  assert.ok(!tasks[0].label.includes("cook ahead"));
   assert.equal(tasks[0].week, "this");
+});
+
+// --- prep notes and reconciliation -------------------------------------
+
+test("day-of instructions are separated from weekend work", () => {
+  const { prep, dayOf } = splitPrepNote("Cut chicken and marinate in soy; Day-of: coat in starch and fry.");
+  assert.equal(prep, "Cut chicken and marinate in soy");
+  assert.equal(dayOf, "coat in starch and fry.");
+});
+
+test("a note with no day-of half is left whole", () => {
+  const { prep, dayOf } = splitPrepNote("Form patties and freeze flat.");
+  assert.equal(prep, "Form patties and freeze flat.");
+  assert.equal(dayOf, null);
+});
+
+test("prep tasks carry a stable key so ticks survive a replan", () => {
+  const meals = [{ id: "m", name: "Adobo", ingredients: ["chicken"], prepNotes: "Marinate. Day-of: simmer." }];
+  const first = prepTasks({ Monday: "m" }, {}, meals, []);
+  const second = prepTasks({ Tuesday: "m" }, {}, meals, []);
+  assert.equal(first[0].key, second[0].key, "same meal, same job, same key");
+});
+
+test("prep reconciles: adds new, keeps hand-added, drops what left the plan", () => {
+  const meals = [{ id: "m", name: "Adobo", ingredients: ["chicken"], prepNotes: "Marinate." }];
+  const tasks = prepTasks({ Monday: "m" }, {}, meals, []);
+
+  const withManual = reconcilePrep([{ id: "x", label: "Sharpen knives", checked: false }], tasks);
+  assert.ok(withManual.some((t) => t.label === "Sharpen knives"), "hand-added survives");
+  assert.ok(withManual.some((t) => t.source === "plan"), "plan task added");
+
+  const emptied = reconcilePrep(withManual, []);
+  assert.ok(emptied.some((t) => t.label === "Sharpen knives"));
+  assert.ok(!emptied.some((t) => t.source === "plan" && !t.checked), "plan task gone with the meal");
+});
+
+test("a prep task already ticked is not removed when the plan moves on", () => {
+  const done = [{ key: "this::Adobo::Marinate.", label: "Marinate.", checked: true, source: "plan" }];
+  const out = reconcilePrep(done, []);
+  assert.equal(out.length, 1);
 });

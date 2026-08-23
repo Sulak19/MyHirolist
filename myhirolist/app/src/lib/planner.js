@@ -386,6 +386,17 @@ export function reconcileShopping(shopping, needs, dismissed = []) {
  * their own prepNotes keep them verbatim - those are specific instructions,
  * not something to merge.
  */
+/**
+ * The weekend's jobs, grouped by the work rather than by the meal.
+ *
+ * Prep notes usually carry two different things: what to do at the weekend,
+ * and what to do on the night ("Day-of: coat in starch and fry"). Only the
+ * first belongs on a weekend list, so they are split apart - the day-of half
+ * travels with the task but is not what you read while prepping.
+ *
+ * Returns [{ key, label, dayOf, meal, week, kind }]; `key` is stable so the
+ * list can be reconciled without losing which tasks are already ticked.
+ */
 export function prepTasks(thisWeekPlan, nextWeekPlan, meals, batches) {
   const tasks = [];
   const seen = new Set();
@@ -403,7 +414,8 @@ export function prepTasks(thisWeekPlan, nextWeekPlan, meals, batches) {
       seen.add(meal.id);
 
       if (meal.prepNotes) {
-        bespoke.push({ label: meal.prepNotes, meal: meal.name, kind: "meal", week });
+        const { prep, dayOf } = splitPrepNote(meal.prepNotes);
+        bespoke.push({ label: prep, dayOf, meal: meal.name, kind: "meal", week });
         continue;
       }
 
@@ -428,7 +440,8 @@ export function prepTasks(thisWeekPlan, nextWeekPlan, meals, batches) {
         return byAction !== 0 ? byAction : a.ingredient.localeCompare(b.ingredient);
       })
       .map((task) => ({
-        label: `${task.action} ${task.ingredient} — for ${task.meals.join(", ")}`,
+        label: `${task.action} ${task.ingredient}`,
+        dayOf: null,
         meal: task.meals.join(", "),
         kind: "ingredient",
         week,
@@ -440,10 +453,70 @@ export function prepTasks(thisWeekPlan, nextWeekPlan, meals, batches) {
   collect(thisWeekPlan, "this");
   collect(nextWeekPlan, "next");
 
-  // Next week's jobs are cook-ahead ones, so say so on the task itself.
-  return tasks.map((task) =>
-    task.week === "next" ? { ...task, label: `${task.label} (cook ahead & freeze for next week)` } : task
-  );
+  return tasks.map((task) => ({ ...task, key: `${task.week}::${task.meal}::${task.label}` }));
+}
+
+/**
+ * Separates weekend work from what happens on the night.
+ * "Cut chicken and marinate. Day-of: coat in starch and fry."
+ *   -> prep: "Cut chicken and marinate."   dayOf: "coat in starch and fry."
+ */
+export function splitPrepNote(notes) {
+  const text = String(notes ?? "").trim();
+  const match = /\bday[- ]?of\s*:\s*/i.exec(text);
+  if (!match) return { prep: text, dayOf: null };
+
+  return {
+    prep: text.slice(0, match.index).trim().replace(/[;,]\s*$/, ""),
+    dayOf: text.slice(match.index + match[0].length).trim(),
+  };
+}
+
+/**
+ * Keeps the prep list in step with the plan, the same way shopping works:
+ * tasks the app derived carry source "plan" and are added and removed as the
+ * plan changes, while anything added by hand is left alone. Ticked tasks
+ * survive so a finished job does not reappear.
+ */
+export function reconcilePrep(existing, tasks) {
+  const list = asArray(existing);
+  const wanted = new Map(tasks.map((task) => [task.key, task]));
+
+  const kept = [];
+  const seenKeys = new Set();
+
+  for (const item of list) {
+    if (item?.source !== "plan") {
+      kept.push(item); // added by hand
+      continue;
+    }
+    if (!item.key) continue; // from an older version; let it be replaced
+
+    if (wanted.has(item.key)) {
+      const task = wanted.get(item.key);
+      kept.push({ ...item, label: task.label, dayOf: task.dayOf, meal: task.meal, week: task.week });
+      seenKeys.add(item.key);
+    } else if (item.checked) {
+      kept.push(item); // already done - dropping it would feel like a bug
+      seenKeys.add(item.key);
+    }
+  }
+
+  const added = [];
+  for (const [key, task] of wanted) {
+    if (seenKeys.has(key)) continue;
+    added.push({
+      key,
+      label: task.label,
+      dayOf: task.dayOf,
+      meal: task.meal,
+      week: task.week,
+      checked: false,
+      source: "plan",
+    });
+  }
+
+  return [...added, ...kept];
 }
 
 // Whether a meal is worth preparing a week early. The household's own prep

@@ -25,7 +25,7 @@ import { loadHouseholdData, saveHouseholdData, subscribeToHouseholdData, scanIma
 import { useScanAvailable } from "./lib/useCapabilities.js";
 import { mergeWithDefaults } from "./lib/merge.js";
 import { rolloverWeeks, EMPTY_WEEK } from "./lib/weeks.js";
-import { planWeek, replan, shoppingNeeds, reconcileShopping, prepTasks, CATEGORY_ORDER, locationCategory } from "./lib/planner.js";
+import { planWeek, replan, shoppingNeeds, reconcileShopping, prepTasks, reconcilePrep, CATEGORY_ORDER, locationCategory } from "./lib/planner.js";
 import { getToday } from "./lib/api.js";
 import { C, useTheme } from "./lib/theme.js";
 
@@ -261,6 +261,30 @@ function usePlanShopping(data, setData, ready) {
   }, [signature, ready]);
 }
 
+
+/* Prep follows the plan, the same way shopping does. Choosing a meal is
+   enough - there is no button to press, because a list you have to remember
+   to refresh is a list that goes stale. */
+function usePlanPrep(data, setData, ready) {
+  const signature = JSON.stringify([data?.weekPlan, data?.nextWeekPlan]);
+
+  useEffect(() => {
+    if (!ready || !data) return;
+
+    const tasks = prepTasks(data.weekPlan, data.nextWeekPlan, data.mealPrep, data.batchCooking);
+    const next = reconcilePrep(data.weekendPrep, tasks);
+
+    const before = (data.weekendPrep ?? []).map((t) => `${t.key ?? t.label}:${t.checked}`).sort().join("|");
+    const after = next.map((t) => `${t.key ?? t.label}:${t.checked}`).sort().join("|");
+    if (before === after) return;
+
+    setData((current) => ({
+      ...current,
+      weekendPrep: next.map((task) => (task.id ? task : { ...task, id: uid() })),
+    }));
+  }, [signature, ready]);
+}
+
 const SAVE_DEBOUNCE_MS = 800;
 
 function useAutoSave(data, ready, setSaveStatus, setSaveError, isRemoteUpdateRef) {
@@ -371,6 +395,7 @@ export default function HomeBase() {
   }, []);
   useAutoSave(data, ready, setSaveStatus, setSaveError, isRemoteUpdateRef);
   usePlanShopping(data, setData, ready);
+  usePlanPrep(data, setData, ready);
 
   // Live sync: when your partner's phone saves a change, it shows up here
   // automatically — no refresh needed.
@@ -925,13 +950,27 @@ function TapSelect({ value, options, onChange, placeholder, disabled }) {
 function PlanTab({ meals, plan, onPlanChange, planAuto, planWeek: activeWeek, onPlanWeekChange, otherWeekPlan, thisWeekPlan, nextWeekPlan, mealHistory, shoppingList, onShoppingChange, prepList, onPrepChange, selectedMealIds, batchList, onBatchChange, inventory }) {
   const planContext = { meals, batches: batchList, inventory, mealHistory, otherWeekPlan };
 
-  // Filling marks every day it chose as the app's, so a later override knows
-  // which days it is free to reshuffle.
-  const fillWeek = () => {
-    const filled = planWeek({ ...planContext, existingPlan: plan });
-    const auto = {};
-    for (const day of WEEKDAYS) auto[day] = Boolean(filled[day]) && !plan[day] ? true : Boolean(planAuto?.[day]);
-    onPlanChange(filled, auto);
+  // Suggests rather than decides: the empty days get a proposal each, which
+  // you accept one at a time. Nothing is written to the plan here.
+  const suggestEmptyDays = () => {
+    const proposed = planWeek({ ...planContext, existingPlan: plan });
+    const next = {};
+
+    for (const day of WEEKDAYS) {
+      if (plan[day] || !proposed[day]) continue;
+      const value = proposed[day];
+
+      if (String(value).startsWith("batch:")) {
+        const batchId = value.slice(6);
+        const batch = batchList.find((b) => b.id === batchId);
+        if (batch) next[day] = { type: "batch", batchId, label: `${batch.name} (batch portion)` };
+        continue;
+      }
+      const meal = meals.find((m) => m.id === value);
+      if (meal) next[day] = { type: "meal", mealId: meal.id, label: meal.name };
+    }
+
+    setSuggestions((prev) => ({ ...prev, ...next }));
   };
 
   // The plan is a suggestion, not a decision. Pick a different meal for one
@@ -1053,17 +1092,6 @@ function PlanTab({ meals, plan, onPlanChange, planAuto, planWeek: activeWeek, on
     }
   };
 
-  // Shopping keeps itself in step with the plan now, so this button is just
-  // about prep - and prep is grouped by the job, since three meals wanting
-  // onions is one chopping session, not three.
-  const addPlannedToLists = () => {
-    const grouped = prepTasks(thisWeekPlan, nextWeekPlan, meals, batchList);
-    const existing = new Set(prepList.map((t) => t.label));
-    const fresh = grouped
-      .filter((task) => !existing.has(task.label))
-      .map((task) => ({ id: uid(), meal: task.meal, label: task.label, checked: false }));
-    if (fresh.length) onPrepChange([...prepList, ...fresh]);
-  };
 
   return (
     <div>
@@ -1089,8 +1117,8 @@ function PlanTab({ meals, plan, onPlanChange, planAuto, planWeek: activeWeek, on
         </div>
       </div>
 
-      <button style={styles.fillWeekBtn} onClick={fillWeek}>
-        <Shuffle size={14} /> Plan the empty days
+      <button style={styles.fillWeekBtn} onClick={suggestEmptyDays}>
+        <Shuffle size={14} /> Suggest for the empty days
       </button>
       <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 12 }}>
         Empty days auto-suggest from batch portions first, then what's in stock — pick your own from the shortlist anytime.
@@ -1160,9 +1188,9 @@ function PlanTab({ meals, plan, onPlanChange, planAuto, planWeek: activeWeek, on
       </div>
 
       {plannedMeals.length > 0 && (
-        <button style={{ ...styles.addSpendBtn, marginTop: 14 }} onClick={addPlannedToLists}>
-          <ShoppingCart size={14} /> Add prep tasks for the fortnight
-        </button>
+        <div style={styles.planFootnote}>
+          Shopping and weekend prep follow this plan on their own.
+        </div>
       )}
     </div>
   );
@@ -1622,102 +1650,135 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
 }
 
 /* ---------------- WEEKEND PREP ---------------- */
+/* Weekend prep.
+
+   The old version grouped by meal, which meant a heading per task and a wall
+   of prose in each row - including the "day-of" half, which is not weekend
+   work at all. This version splits the two, groups by WHEN the work is for,
+   keeps the meal as a small tag, and shows how much is left. */
 function PrepTab({ list, onChange }) {
   const [name, setName] = useState("");
 
   const toggle = (id) => onChange(list.map((t) => (t.id === id ? { ...t, checked: !t.checked } : t)));
   const remove = (id) => onChange(list.filter((t) => t.id !== id));
   const clearCompleted = () => onChange(list.filter((t) => !t.checked));
-  const clearAll = () => onChange([]);
   const addManual = () => {
     if (!name.trim()) return;
-    onChange([...list, { id: uid(), meal: "Other", label: name.trim(), checked: false }]);
+    onChange([...list, { id: uid(), meal: null, label: name.trim(), checked: false }]);
     setName("");
   };
 
-  const byMeal = {};
-  list.forEach((t) => {
-    if (!byMeal[t.meal]) byMeal[t.meal] = [];
-    byMeal[t.meal].push(t);
-  });
+  const open = list.filter((t) => !t.checked);
+  const done = list.filter((t) => t.checked);
+  const thisWeek = open.filter((t) => t.week !== "next");
+  const nextWeek = open.filter((t) => t.week === "next");
+  const progress = list.length ? Math.round((done.length / list.length) * 100) : 0;
+
+  const Task = ({ task }) => (
+    <div style={styles.prepTask}>
+      <button onClick={() => toggle(task.id)} style={styles.prepCheckBtn}>
+        <span style={{ ...styles.prepBox, background: task.checked ? C.teal : "transparent" }}>
+          {task.checked && <Check size={11} color={C.paper} strokeWidth={3} />}
+        </span>
+      </button>
+
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ ...styles.prepLabel, textDecoration: task.checked ? "line-through" : "none" }}>
+          {task.label}
+        </div>
+        {(task.meal || task.dayOf) && (
+          <div style={styles.prepMeta}>
+            {task.meal && <span style={styles.prepMealChip}>{task.meal}</span>}
+            {task.dayOf && <span style={styles.prepDayOf}>on the night: {task.dayOf}</span>}
+          </div>
+        )}
+      </div>
+
+      <button style={styles.xBtn} onClick={() => remove(task.id)}>
+        <X size={13} />
+      </button>
+    </div>
+  );
+
+  const Section = ({ title, hint, tasks }) =>
+    tasks.length === 0 ? null : (
+      <div style={{ marginTop: 18 }}>
+        <div style={styles.prepSectionHead}>
+          <span>{title}</span>
+          <span style={styles.prepCount}>{tasks.length}</span>
+        </div>
+        {hint && <div style={styles.prepHint}>{hint}</div>}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+          {tasks.map((task) => (
+            <Task key={task.id} task={task} />
+          ))}
+        </div>
+      </div>
+    );
 
   return (
     <div>
       <SectionTitle>Weekend prep</SectionTitle>
       <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 12 }}>
-        Cutting, marinating, portioning — no cooking. Select meals on the Meals tab to generate tasks here.
+        Cutting, marinating, portioning — no cooking. Tasks appear here on their own as you plan meals.
       </div>
 
-      <AddRow>
-        <input
-          style={styles.input}
-          placeholder="Add a prep task manually"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && addManual()}
-        />
-        <IconBtn onClick={addManual} />
-      </AddRow>
-
-      {Object.keys(byMeal).length === 0 && (
-        <div style={{ marginTop: 14 }}>
-          <Empty text="No prep tasks yet." />
+      {list.length > 0 && (
+        <div style={styles.prepProgressWrap}>
+          <div style={styles.prepProgressBar}>
+            <div style={{ ...styles.prepProgressFill, width: `${progress}%` }} />
+          </div>
+          <div style={styles.prepProgressText}>
+            {done.length === list.length ? "All done" : `${done.length} of ${list.length} done`}
+          </div>
         </div>
       )}
 
-      {Object.entries(byMeal).map(([meal, tasks]) => (
-        <div key={meal} style={{ marginTop: 16 }}>
-          <div style={{ fontSize: 11, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>{meal}</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {tasks.map((t) => (
-              <div key={t.id} style={{ ...styles.row, opacity: t.checked ? 0.5 : 1 }}>
-                <button
-                  onClick={() => toggle(t.id)}
-                  style={{ display: "flex", alignItems: "center", gap: 10, background: "none", border: "none", cursor: "pointer", flex: 1, textAlign: "left" }}
-                >
-                  <span
-                    style={{
-                      width: 18,
-                      height: 18,
-                      borderRadius: 4,
-                      border: `2px solid ${C.sage}`,
-                      background: t.checked ? C.sage : "transparent",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {t.checked && <Check size={12} color={C.paper} strokeWidth={3} />}
-                  </span>
-                  <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 13.5, textDecoration: t.checked ? "line-through" : "none" }}>
-                    {t.label}
-                  </span>
-                </button>
-                <button style={styles.xBtn} onClick={() => remove(t.id)}>
-                  <X size={14} />
-                </button>
-              </div>
+      <Section title="This week" tasks={thisWeek} />
+      <Section
+        title="Cook ahead for next week"
+        hint="These freeze, so getting them out of the way now saves a weeknight."
+        tasks={nextWeek}
+      />
+
+      {done.length > 0 && (
+        <div style={{ marginTop: 20, opacity: 0.55 }}>
+          <div style={styles.prepSectionHead}>
+            <span>Done</span>
+            <button style={styles.prepClearBtn} onClick={clearCompleted}>
+              clear
+            </button>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+            {done.map((task) => (
+              <Task key={task.id} task={task} />
             ))}
           </div>
         </div>
-      ))}
+      )}
 
-      {list.length > 0 && (
-        <div style={{ display: "flex", gap: 14, marginTop: 16 }}>
-          <button style={styles.linkBtnSmall} onClick={clearCompleted}>
-            Clear completed
-          </button>
-          <button style={styles.linkBtnSmall} onClick={clearAll}>
-            Clear all
-          </button>
+      {list.length === 0 && (
+        <div style={{ marginTop: 14 }}>
+          <Empty text="Nothing to prep — plan some meals and the jobs will show up here." />
         </div>
       )}
+
+      <div style={{ marginTop: 20 }}>
+        <AddRow>
+          <input
+            style={styles.input}
+            placeholder="Add your own prep task"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addManual()}
+          />
+          <IconBtn onClick={addManual} />
+        </AddRow>
+      </div>
     </div>
   );
 }
 
-/* ---------------- SHOPPING ---------------- */
 function ShoppingTab({ list, onChange, inventory, onInventoryChange, onDismiss, onStocked }) {
   const [name, setName] = useState("");
   const [promptIds, setPromptIds] = useState(new Set());
@@ -3314,6 +3375,91 @@ const buildStyles = () => ({
     letterSpacing: 0.6,
     textTransform: "uppercase",
     color: C.sage,
+  },
+  prepProgressWrap: { display: "flex", alignItems: "center", gap: 10, marginBottom: 4 },
+  prepProgressBar: {
+    flex: 1,
+    height: 5,
+    borderRadius: 999,
+    background: C.inset,
+    overflow: "hidden",
+  },
+  prepProgressFill: { height: "100%", background: C.sage, borderRadius: 999, transition: "width 200ms" },
+  prepProgressText: {
+    fontFamily: "'IBM Plex Mono', monospace",
+    fontSize: 11,
+    color: C.inkSoft,
+    flexShrink: 0,
+  },
+  prepSectionHead: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color: C.sage,
+  },
+  prepCount: {
+    fontFamily: "'IBM Plex Mono', monospace",
+    fontWeight: 400,
+    color: C.inkFaint,
+  },
+  prepClearBtn: {
+    background: "none",
+    border: "none",
+    padding: 0,
+    cursor: "pointer",
+    fontFamily: "'IBM Plex Mono', monospace",
+    fontSize: 11,
+    color: C.inkFaint,
+    textTransform: "none",
+    letterSpacing: 0,
+  },
+  prepHint: { fontSize: 11.5, color: C.inkFaint, marginTop: 3, fontStyle: "italic" },
+  prepTask: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 10,
+    background: C.card,
+    border: `1px solid ${C.line}`,
+    borderRadius: 10,
+    padding: "10px 10px 10px 12px",
+  },
+  prepCheckBtn: {
+    background: "none",
+    border: "none",
+    padding: 0,
+    cursor: "pointer",
+    marginTop: 1,
+    flexShrink: 0,
+  },
+  prepBox: {
+    width: 17,
+    height: 17,
+    borderRadius: 5,
+    border: `2px solid ${C.teal}`,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  prepLabel: { fontFamily: "'Inter', sans-serif", fontSize: 13.5, lineHeight: 1.45 },
+  prepMeta: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginTop: 5 },
+  prepMealChip: {
+    background: C.inset,
+    color: C.inkSoft,
+    borderRadius: 999,
+    padding: "2px 8px",
+    fontSize: 10.5,
+    fontFamily: "'IBM Plex Mono', monospace",
+  },
+  prepDayOf: { fontSize: 11, color: C.inkFaint, fontStyle: "italic" },
+  planFootnote: {
+    marginTop: 14,
+    fontSize: 12,
+    color: C.inkFaint,
+    fontStyle: "italic",
   },
   fillWeekBtn: {
     display: "inline-flex",
