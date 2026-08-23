@@ -1,3 +1,37 @@
+## 1.0.13
+
+feat(prep): automatic, split from day-of, and redesigned
+
+The button is gone. Prep now follows the plan the way shopping does -
+choosing a meal is enough. A list you have to remember to refresh is a
+list that goes stale, which is exactly what happened: pressing the button
+a second time did nothing, because tasks were deduplicated by label.
+
+Prep notes carry two different things: weekend work, and what to do on
+the night ('Day-of: coat in starch and fry'). Only the first belongs on a
+weekend list, so they are split. The day-of half still travels with the
+task, shown quietly underneath, but it is not what you read while
+prepping.
+
+The tab is rebuilt around that:
+- Grouped by WHEN the work is for - This week, then Cook ahead for next
+  week - instead of a heading per meal above a single task.
+- The meal is a small chip, not a section header.
+- A progress bar and a count, because a prep list is something you work
+  through.
+- Completed tasks collapse to a muted Done section rather than sitting
+  greyed out among the live ones.
+- Tasks carry a stable key, so ticking one off survives a replan, and a
+  job already done is never removed when the plan moves on.
+
+The plan button now suggests rather than decides: 'Suggest for the empty
+days' proposes a meal per empty day, which you accept one at a time with
+Use this. Nothing is written to the plan until you say so.
+
+62 app tests, 77 server tests. Verified on a 375px viewport: suggesting
+leaves the plan untouched, accepting one generates its prep unprompted,
+the day-of half is separated, and nothing overflows.
+
 ## 1.0.12
 
 feat: shopping driven by stock and forecast, staged put-away, live replanning
