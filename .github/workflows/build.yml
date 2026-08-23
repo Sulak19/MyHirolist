@@ -72,8 +72,6 @@ jobs:
           args: |
             --target myhirolist
             --all
-            --image myhirolist-{arch}
-            --docker-hub ghcr.io/${{ github.repository_owner }}
             --addon
 
       - name: Record the version in the repository
