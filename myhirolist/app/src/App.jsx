@@ -230,7 +230,7 @@ async function loadState(setData, setLoaded) {
    source and is never touched. Removing a plan item is remembered, so it does
    not silently reappear on the next pass. */
 function usePlanShopping(data, setData, ready) {
-  const signature = JSON.stringify([data?.weekPlan, data?.nextWeekPlan, data?.inventory?.map((i) => [i.name, i.lowStock])]);
+  const signature = JSON.stringify([data?.weekPlan, data?.nextWeekPlan, data?.inventory?.map((i) => [i.name, i.location, i.lowStock])]);
 
   useEffect(() => {
     if (!ready || !data) return;
@@ -266,12 +266,12 @@ function usePlanShopping(data, setData, ready) {
    enough - there is no button to press, because a list you have to remember
    to refresh is a list that goes stale. */
 function usePlanPrep(data, setData, ready) {
-  const signature = JSON.stringify([data?.weekPlan, data?.nextWeekPlan]);
+  const signature = JSON.stringify([data?.weekPlan, data?.nextWeekPlan, data?.inventory?.map((i) => [i.name, i.lowStock])]);
 
   useEffect(() => {
     if (!ready || !data) return;
 
-    const tasks = prepTasks(data.weekPlan, data.nextWeekPlan, data.mealPrep, data.batchCooking);
+    const tasks = prepTasks(data.weekPlan, data.nextWeekPlan, data.mealPrep, data.batchCooking, data.inventory);
     const next = reconcilePrep(data.weekendPrep, tasks);
 
     const before = (data.weekendPrep ?? []).map((t) => `${t.key ?? t.label}:${t.checked}`).sort().join("|");
@@ -1720,7 +1720,7 @@ function PrepTab({ list, onChange }) {
     <div>
       <SectionTitle>Weekend prep</SectionTitle>
       <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 12 }}>
-        Cutting, marinating, portioning — no cooking. Tasks appear here on their own as you plan meals.
+        Cutting, marinating, portioning, and making low-stock staples. Tasks appear here automatically.
       </div>
 
       {list.length > 0 && (
