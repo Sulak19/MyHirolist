@@ -406,7 +406,7 @@ export default function HomeBase() {
       )}
 
       <main style={styles.main}>
-        {tab === "home" && <HomeTab data={data} setTab={setTab} />}
+        {tab === "home" && <HomeTab data={data} setTab={setTab} onCleaningChange={(v) => update("cleaning", v)} />}
         {tab === "plan" && (
           <PlanTab
             meals={data.mealPrep}
@@ -481,55 +481,164 @@ export default function HomeBase() {
 }
 
 /* ---------------- HOME ---------------- */
-/* Today, straight from Home Assistant's calendars: the app's own dinners,
-   chores and expiry dates, alongside anything else the household keeps in HA.
-   Renders nothing at all when there is no calendar or nothing on today, so an
-   install without Local Calendar set up looks no different from before. */
-function TodayCalendarCard() {
-  const [feed, setFeed] = useState(null);
+/* The Home tab's agenda. Today always; tomorrow when today is thin or the
+   evening has come (the server decides). Each day is grouped - dinner, chores,
+   use up, anything else on the calendar - so it reads as a plan, not a dump.
 
+   Today's chores can be ticked off right here. The calendar event goes on the
+   next sync pass, but the tick is reflected instantly from local data, so
+   nothing lingers on screen. */
+
+const DAY_LABELS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+function labelForDate(dateKey, index) {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  const weekday = DAY_LABELS[date.getDay()];
+  const dayMonth = date.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  if (index === 0) return `Today · ${weekday}`;
+  if (index === 1) return `Tomorrow · ${weekday}`;
+  return `${weekday} ${dayMonth}`;
+}
+
+function timeOf(entry) {
+  if (entry.allDay) return null;
+  const parsed = new Date(entry.start);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+function useAgenda() {
+  const [agenda, setAgenda] = useState(null);
   useEffect(() => {
     let live = true;
-    const load = () => getToday().then((result) => live && setFeed(result));
-
+    const load = () => getToday().then((result) => live && setAgenda(result));
     load();
-    // Cheap: the server caches for a minute, so this is mostly a no-op that
-    // keeps the card honest if an event is added elsewhere.
     const timer = setInterval(load, 5 * 60 * 1000);
-
+    const onVisible = () => document.visibilityState === "visible" && load();
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       live = false;
       clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
+  return agenda;
+}
 
-  if (!feed?.available || !feed.events?.length) return null;
-
-  const timeOf = (event) => {
-    if (event.allDay) return "all day";
-    const parsed = new Date(event.start);
-    return Number.isNaN(parsed.getTime())
-      ? ""
-      : parsed.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+// When there is no calendar, build the same shape from local data so the tab
+// never goes blank. Only today - the forward view needs the calendar.
+function agendaFromData(data) {
+  const now = new Date();
+  const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const weekday = DAY_LABELS[now.getDay()];
+  const mealId = data.weekPlan?.[weekday];
+  const meal = mealId ? data.mealPrep.find((m) => m.id === mealId) : null;
+  return {
+    available: false,
+    days: [
+      {
+        date: todayKey,
+        dinner: meal ? { name: meal.name, refId: todayKey, allDay: true } : null,
+        chores: data.cleaning.filter((c) => isDue(c)).map((c) => ({ name: c.name, refId: c.id, allDay: true })),
+        expiry: data.inventory
+          .filter((i) => i.expiry && (new Date(i.expiry) - now) / 86400000 <= 3)
+          .map((i) => ({ name: i.name, refId: i.id, allDay: true })),
+        other: [],
+      },
+    ],
   };
+}
+
+function DayCards({ data, onCleaningChange, setTab }) {
+  const remote = useAgenda();
+  const agenda = remote?.available ? remote : agendaFromData(data);
+
+  // Chores done today vanish from the calendar on the next sync pass; hide
+  // them now so a tick feels instant.
+  const todayString = new Date().toDateString();
+  const doneToday = new Set(
+    data.cleaning
+      .filter((c) => c.lastDone && new Date(c.lastDone).toDateString() === todayString)
+      .map((c) => c.id)
+  );
+
+  const markDone = (id) =>
+    onCleaningChange(data.cleaning.map((t) => (t.id === id ? { ...t, lastDone: new Date().toISOString() } : t)));
+
+  const readyPortions = data.batchCooking.filter((b) => b.portions > 0).reduce((sum, b) => sum + b.portions, 0);
 
   return (
-    <div style={{ ...styles.card, marginBottom: 12 }}>
-      <div style={styles.cardLabel}>On the calendar today</div>
-      <div style={{ marginTop: 8 }}>
-        {feed.events.map((event, index) => (
-          <div key={`${event.entityId}-${index}`} style={styles.calendarRow}>
-            <span style={styles.calendarTime}>{timeOf(event)}</span>
-            <span style={{ flex: 1 }}>{event.summary}</span>
-            {!event.mine && <span style={styles.calendarSource}>{event.calendar}</span>}
+    <>
+      {agenda.days.map((day, index) => {
+        const isToday = index === 0;
+        const chores = day.chores.filter((c) => !(isToday && doneToday.has(c.refId)));
+        const isEmpty = !day.dinner && chores.length === 0 && day.expiry.length === 0 && day.other.length === 0;
+
+        return (
+          <div key={day.date} style={{ ...styles.card, opacity: isToday ? 1 : 0.92 }}>
+            <div style={styles.cardLabel}>{labelForDate(day.date, index)}</div>
+
+            <div style={{ marginTop: 10 }}>
+              <div style={styles.dayKicker}>Dinner</div>
+              {day.dinner ? (
+                <button onClick={() => setTab("plan")} style={{ ...styles.linkBtn, ...styles.dayDinner }}>
+                  {day.dinner.name}
+                </button>
+              ) : (
+                <div style={styles.dayMuted}>
+                  {isToday && readyPortions > 0
+                    ? `Nothing planned — ${readyPortions} batch portion${readyPortions === 1 ? "" : "s"} ready to reheat`
+                    : "Nothing planned"}
+                </div>
+              )}
+            </div>
+
+            {chores.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div style={styles.dayKicker}>Chores</div>
+                {isToday ? (
+                  <div style={styles.choreWrap}>
+                    {chores.map((c) => (
+                      <button key={c.refId ?? c.name} onClick={() => c.refId && markDone(c.refId)} style={styles.choreChip}>
+                        <span style={styles.choreBox} />
+                        {c.name}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={styles.dayList}>{chores.map((c) => c.name).join(" · ")}</div>
+                )}
+              </div>
+            )}
+
+            {day.expiry.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ ...styles.dayKicker, color: C.rust }}>Use up</div>
+                <div style={{ ...styles.dayList, color: C.rust }}>{day.expiry.map((e) => e.name).join(" · ")}</div>
+              </div>
+            )}
+
+            {day.other.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div style={styles.dayKicker}>Also on</div>
+                {day.other.map((o, i) => (
+                  <div key={i} style={styles.dayList}>
+                    {timeOf(o) && <span style={styles.dayTime}>{timeOf(o)} </span>}
+                    {o.name}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {isEmpty && <div style={{ ...styles.dayMuted, color: C.sage, marginTop: 10 }}>Nothing on — a clear day.</div>}
           </div>
-        ))}
-      </div>
-    </div>
+        );
+      })}
+    </>
   );
 }
 
-function HomeTab({ data, setTab }) {
+function HomeTab({ data, setTab, onCleaningChange }) {
   const dogStats = data.dogFood.dogs.map((d) => ({
     ...d,
     daysLeft: d.packsPerDay > 0 ? Math.floor(d.packsOnHand / d.packsPerDay) : null,
@@ -568,54 +677,7 @@ function HomeTab({ data, setTab }) {
 
   return (
     <div>
-      <TodayCalendarCard />
-
-      <div style={styles.card}>
-        <div style={styles.cardLabel}>Today · {todayName}</div>
-
-        <div style={{ marginTop: 10 }}>
-          <div style={{ fontSize: 11, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 0.5 }}>Dinner</div>
-          {todaysMeal ? (
-            <button onClick={() => setTab("plan")} style={{ ...styles.linkBtn, marginTop: 2, fontSize: 15, fontFamily: "'Zilla Slab', serif", fontWeight: 600, color: C.ink }}>
-              {todaysMeal.name}
-            </button>
-          ) : (
-            <div style={{ fontSize: 13.5, color: C.inkFaint, fontStyle: "italic", marginTop: 2 }}>
-              {isWeekday ? "Nothing planned — " : "Weekend — "}
-              {readyPortions > 0 ? `${readyPortions} batch portion${readyPortions === 1 ? "" : "s"} ready to reheat` : "check the Plan tab"}
-            </div>
-          )}
-        </div>
-
-        {dueTasks.length > 0 && (
-          <div style={{ marginTop: 12 }}>
-            <div style={{ fontSize: 11, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 0.5 }}>Cleaning due</div>
-            <div style={{ fontSize: 13.5, marginTop: 2 }}>
-              {dueTasks.map((t, i) => {
-                const overdueBy = daysOverdue(t);
-                const isOverdue = overdueBy > 0 || (!t.lastDone && t.freq !== "As needed");
-                return (
-                  <span key={t.id}>
-                    <span style={isOverdue ? { color: C.rust, fontWeight: 700 } : undefined}>{t.name}</span>
-                    {i < dueTasks.length - 1 ? ", " : ""}
-                  </span>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {attentionItems.length > 0 && (
-          <div style={{ marginTop: 12 }}>
-            <div style={{ fontSize: 11, color: C.rust, textTransform: "uppercase", letterSpacing: 0.5 }}>Needs attention</div>
-            <div style={{ fontSize: 13.5, marginTop: 2, color: C.rust }}>{attentionItems.join(", ")}</div>
-          </div>
-        )}
-
-        {dueTasks.length === 0 && attentionItems.length === 0 && (
-          <div style={{ fontSize: 13.5, color: C.sage, marginTop: 12 }}>Nothing urgent — you're on top of it.</div>
-        )}
-      </div>
+      <DayCards data={data} onCleaningChange={onCleaningChange} setTab={setTab} />
 
       <div style={styles.grid2}>
         <SummaryCard
@@ -3174,6 +3236,32 @@ const buildStyles = () => ({
     lineHeight: "16px",
     cursor: "pointer",
     color: C.ink,
+  },
+  dayKicker: { fontSize: 11, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 0.5 },
+  dayDinner: { marginTop: 2, fontSize: 15, fontFamily: "'Zilla Slab', serif", fontWeight: 600, color: C.ink },
+  dayMuted: { fontSize: 13.5, color: C.inkFaint, fontStyle: "italic", marginTop: 2 },
+  dayList: { fontSize: 13.5, marginTop: 3, lineHeight: 1.5 },
+  dayTime: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: C.sage },
+  choreWrap: { display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 },
+  choreChip: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    padding: "7px 11px 7px 8px",
+    borderRadius: 999,
+    border: `1px solid ${C.line}`,
+    background: C.card,
+    color: C.ink,
+    fontFamily: "'Inter', sans-serif",
+    fontSize: 13,
+    cursor: "pointer",
+  },
+  choreBox: {
+    width: 14,
+    height: 14,
+    borderRadius: 4,
+    border: `1.5px solid ${C.sage}`,
+    flexShrink: 0,
   },
   calendarRow: {
     display: "flex",

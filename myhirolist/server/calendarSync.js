@@ -2,6 +2,7 @@
 // difference, apply it. The thinking lives in calendar.js; this is the I/O.
 
 import { planEvents, reconcileEvents, describe, keyFrom, addDays, toDateKey } from "./calendar.js";
+import { buildAgenda, shouldShowTomorrow } from "./agenda.js";
 
 // How far either side of today the projection is managed. Events outside this
 // window are neither read nor written, so nothing older is disturbed.
@@ -119,22 +120,25 @@ export function createCalendarSync({ store, ha, entityId, log, pollMs = 15 * 60 
   };
 }
 
-// Today's events for the Home tab. By default only the Home Base calendar:
-// reading every calendar sounded good until it surfaced ten energy-tariff
-// events above the chores. `entityIds` can widen it to a chosen set.
+// The Home tab's agenda, read back out of the calendar: today, and tomorrow
+// when today is thin or the evening has come. Grouped by kind so the tab can
+// show dinner, chores and expiry as sections rather than a flat dump.
 export function createTodayFeed({ ha, log, entityIds = null, cacheMs = 60000 }) {
-  let cached = { at: 0, events: [] };
+  let cached = { at: 0, agenda: null };
 
-  return async function today() {
-    if (Date.now() - cached.at < cacheMs) return cached.events;
+  return async function agenda() {
+    if (cached.agenda && Date.now() - cached.at < cacheMs) return cached.agenda;
 
     const all = await ha.listCalendars();
     const calendars = entityIds
       ? all.filter((calendar) => entityIds.includes(calendar.entity_id))
       : all;
+
     const now = new Date();
+    const today = toDateKey(now.getTime());
+    const tomorrow = addDays(today, 1);
     const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 2);
 
     const perCalendar = await Promise.all(
       calendars.map((calendar) =>
@@ -143,11 +147,10 @@ export function createTodayFeed({ ha, log, entityIds = null, cacheMs = 60000 }) 
           .then((events) =>
             events.map((event) => ({
               summary: event.summary,
+              description: event.description,
               start: event.start,
               allDay: event.allDay,
               calendar: calendar.name ?? calendar.entity_id,
-              entityId: calendar.entity_id,
-              mine: Boolean(keyFrom(event.description)),
             }))
           )
           .catch((error) => {
@@ -157,13 +160,12 @@ export function createTodayFeed({ ha, log, entityIds = null, cacheMs = 60000 }) 
       )
     );
 
-    const events = perCalendar.flat().sort((a, b) => {
-      // All-day events belong at the top of the day, then timed ones in order.
-      if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
-      return String(a.start).localeCompare(String(b.start));
-    });
+    const [todayAgenda, tomorrowAgenda] = buildAgenda(perCalendar.flat(), [today, tomorrow]);
+    const result = {
+      days: shouldShowTomorrow(todayAgenda, now) ? [todayAgenda, tomorrowAgenda] : [todayAgenda],
+    };
 
-    cached = { at: Date.now(), events };
-    return events;
+    cached = { at: Date.now(), agenda: result };
+    return result;
   };
 }

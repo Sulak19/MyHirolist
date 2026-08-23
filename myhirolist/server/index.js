@@ -238,12 +238,13 @@ async function handleApi(req, res, pathname) {
   }
 
   if (pathname === "/api/today" && req.method === "GET") {
-    if (!todayFeed) return sendJson(res, 200, { events: [], available: false });
+    if (!todayFeed) return sendJson(res, 200, { days: [], available: false });
     try {
-      return sendJson(res, 200, { events: await todayFeed(), available: true });
+      const agenda = await todayFeed();
+      return sendJson(res, 200, { ...agenda, available: true });
     } catch (error) {
       log("warn", "could not read today's calendars:", error.message);
-      return sendJson(res, 200, { events: [], available: false, error: error.message });
+      return sendJson(res, 200, { days: [], available: false, error: error.message });
     }
   }
 
