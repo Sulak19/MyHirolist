@@ -1,3 +1,43 @@
+## 1.0.11
+
+feat: fortnight meal planner, aisle-grouped shopping, grouped prep
+
+Planning
+- 'Plan the empty days' fills a week using variety, stock and batch
+  portions. Nothing repeats across the fortnight, proteins are spread so
+  it is not chicken five nights, batch portions are spent before fresh
+  meals, and days already chosen are never overwritten. Deterministic -
+  ties break on list position, not at random.
+- weekPlan is archived into mealHistory at rollover, which is what makes
+  variety possible: the planner can see a meal was cooked three weeks ago.
+  Capped at 180 entries.
+
+Stock
+- The kitchen inventory has no quantities, only a low-stock flag, so
+  stock is never decremented. Ingredients used by an already-planned meal
+  are treated as COMMITTED and not available to assume for next week.
+  That needs no extra data entry and is close enough for a household.
+
+Shopping
+- Derived from both weeks' meals and kept in step automatically. Items
+  the app added carry source: 'plan'; anything typed in by hand is never
+  touched. Something already ticked off stays even if the plan moves on.
+- Grouped by supermarket aisle, and each item cites the meals that want
+  it. Pantry is matched before produce so 'black bean paste' is a jar,
+  not a vegetable.
+- Deleting an app-added item is remembered, so it does not reappear on
+  the next pass - and the memory is pruned once the plan stops wanting
+  it, so it can return honestly later.
+
+Prep
+- Grouped by the job rather than the meal: three meals wanting onions is
+  one chopping session. Meals carrying their own prepNotes keep them
+  verbatim, since those are specific instructions worth preserving.
+
+48 app tests, 77 server tests. Verified in a browser: both weeks fill
+with zero overlap, aisles render in shop order, and a deleted ingredient
+stays deleted across a reconcile pass.
+
 ## 1.0.10
 
 feat(home): agenda fed by the calendar - today, plus tomorrow when today is thin
