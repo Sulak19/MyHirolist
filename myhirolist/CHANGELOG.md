@@ -1,3 +1,25 @@
+## 1.0.10
+
+feat(home): agenda fed by the calendar - today, plus tomorrow when today is thin
+
+The Home tab no longer shows a flat dump of calendar events. It reads the
+calendar and builds an agenda: today always, and tomorrow when today has
+fewer than three open items or it is past 6pm. Each day is grouped -
+dinner, chores, use up, and anything else on the Home Base calendar - so
+it reads as a plan.
+
+Today's chores are tappable chips; a tap marks the task done. The
+calendar event goes on the next sync pass, but the chip disappears
+instantly from local data so nothing lingers. Verified on a 375px
+viewport: tap, gone, persisted, no horizontal overflow.
+
+Without a calendar configured the same card is built from local data, so
+the tab never goes blank - it just cannot look ahead.
+
+agenda.js is pure: classification by the stamped event key, grouping,
+local-date placement for timed events, and the show-tomorrow rule. 9
+tests, passing in UTC and Sydney. The thresholds are two named constants.
+
 ## 1.0.9
 
 feat: two-week meal plan, projected a fortnight onto the calendar
