@@ -96,9 +96,11 @@ what Home Assistant *opens to*, use the native dashboard above: paste
 **Default dashboard** → pick it. That is per-device, so a kitchen tablet can
 land there while a phone keeps the normal view.
 
-Do **not** use a "Webpage" dashboard or an iframe card pointed at the ingress
-URL. Home Assistant sends `X-Frame-Options: SAMEORIGIN` on its own pages, so
-that shows "refused to connect" rather than the app.
+Do **not** use a "Webpage" dashboard or an iframe card pointed at the app's
+URL. Home Assistant refuses to be framed across origins, so it either shows
+"refused to connect" (on the local address) or loads a *second copy of Home
+Assistant inside the first* (on the external one). Neither is what you want.
+The sidebar entry and the dashboard above are the supported ways in.
 
 ## Photo scan
 
