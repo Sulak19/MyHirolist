@@ -1,5 +1,6 @@
 import React from "react";
 import { listSnapshots, restoreSnapshot } from "./lib/api.js";
+import { C } from "./lib/theme.js";
 
 /* Without this, a mistake anywhere in the app renders a blank white screen
    with the reason buried in a console nobody opens on a phone. Since changes
@@ -122,27 +123,27 @@ export default class ErrorBoundary extends React.Component {
   }
 }
 
-const styles = {
+const buildStyles = () => ({
   page: {
     minHeight: "100vh",
-    background: "#FAF7EF",
+    background: C.paper,
     padding: 16,
     boxSizing: "border-box",
     fontFamily: "'Inter', system-ui, sans-serif",
-    color: "#2B2A25",
+    color: C.ink,
   },
   card: {
     maxWidth: 640,
     margin: "0 auto",
-    background: "#FFFDF8",
-    border: "1px solid #EFE8D6",
+    background: C.card,
+    border: `1px solid ${C.line}`,
     borderRadius: 14,
     padding: 20,
   },
   badge: {
     display: "inline-block",
-    background: "#B5502F",
-    color: "#FFFDF8",
+    background: C.rust,
+    color: C.card,
     fontSize: 11,
     fontWeight: 700,
     letterSpacing: 0.6,
@@ -151,10 +152,10 @@ const styles = {
     borderRadius: 6,
   },
   heading: { fontSize: 20, margin: "12px 0 8px", fontWeight: 700 },
-  body: { fontSize: 14, lineHeight: 1.5, color: "#6b6a5e", margin: "0 0 14px" },
+  body: { fontSize: 14, lineHeight: 1.5, color: C.inkSoft, margin: "0 0 14px" },
   pre: {
-    background: "#F1EBD9",
-    border: "1px solid #E2D9C0",
+    background: C.inset,
+    border: `1px solid ${C.lineSoft}`,
     borderRadius: 8,
     padding: 12,
     fontSize: 11.5,
@@ -168,8 +169,8 @@ const styles = {
   },
   actions: { display: "flex", gap: 8, marginTop: 14 },
   primary: {
-    background: "#1F3D3D",
-    color: "#FFFDF8",
+    background: C.teal,
+    color: C.onTeal,
     border: "none",
     borderRadius: 8,
     padding: "10px 16px",
@@ -178,8 +179,8 @@ const styles = {
     cursor: "pointer",
   },
   secondary: {
-    background: "#D9A62E",
-    color: "#2B2A25",
+    background: C.mustard,
+    color: C.ink,
     border: "none",
     borderRadius: 8,
     padding: "10px 16px",
@@ -187,22 +188,22 @@ const styles = {
     fontWeight: 600,
     cursor: "pointer",
   },
-  restoreError: { fontSize: 12.5, color: "#B5502F", marginTop: 10, marginBottom: 0 },
+  restoreError: { fontSize: 12.5, color: C.rust, marginTop: 10, marginBottom: 0 },
   restoreBox: {
     marginTop: 14,
-    border: "1px solid #EFE8D6",
+    border: `1px solid ${C.line}`,
     borderRadius: 8,
     padding: 12,
-    background: "#FAF7EF",
+    background: C.paper,
   },
-  restoreHeading: { fontSize: 12.5, color: "#6b6a5e", marginBottom: 8, lineHeight: 1.45 },
+  restoreHeading: { fontSize: 12.5, color: C.inkSoft, marginBottom: 8, lineHeight: 1.45 },
   restoreRow: {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
     padding: "7px 0",
-    borderBottom: "1px solid #EFE8D6",
+    borderBottom: `1px solid ${C.line}`,
     fontSize: 13,
   },
   linkBtn: {
@@ -211,9 +212,10 @@ const styles = {
     cursor: "pointer",
     fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
     fontSize: 12,
-    color: "#6E7F54",
+    color: C.sage,
     textDecoration: "underline",
     padding: 0,
   },
-  footnote: { fontSize: 12.5, lineHeight: 1.5, color: "#6b6a5e", marginTop: 14, marginBottom: 0 },
-};
+  footnote: { fontSize: 12.5, lineHeight: 1.5, color: C.inkSoft, marginTop: 14, marginBottom: 0 },
+});
+const styles = new Proxy({}, { get: (_, key) => buildStyles()[key] });

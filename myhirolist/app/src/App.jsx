@@ -25,12 +25,13 @@ import { loadHouseholdData, saveHouseholdData, subscribeToHouseholdData, scanIma
 import { useScanAvailable } from "./lib/useCapabilities.js";
 import { mergeWithDefaults } from "./lib/merge.js";
 import { getToday } from "./lib/api.js";
+import { C, useTheme } from "./lib/theme.js";
 
 /* ---------------------------------------------------------
    Home Base — a household dashboard
    Tokens:
-   paper #FAF7EF | card #FFFDF8 | ink #2B2A25
-   teal #1F3D3D | mustard #D9A62E | sage #6E7F54 | rust #B5502F
+   paper ${C.paper} | card ${C.card} | ink ${C.ink}
+   teal ${C.teal} | mustard ${C.mustard} | sage ${C.sage} | rust ${C.rust}
    Display: Zilla Slab | Body: Inter | Mono: IBM Plex Mono
 --------------------------------------------------------- */
 
@@ -283,6 +284,7 @@ const TABS = [
 ];
 
 export default function HomeBase() {
+  useTheme();
   const [data, setData] = useState(null);
   const [ready, setReady] = useState(false);
   const [tab, setTab] = useState("home");
@@ -309,7 +311,7 @@ export default function HomeBase() {
     return (
       <div style={{ ...styles.page, display: "flex", alignItems: "center", justifyContent: "center" }}>
         <style>{FONT_IMPORT}</style>
-        <div style={{ fontFamily: "'IBM Plex Mono', monospace", color: "#6E7F54" }}>loading…</div>
+        <div style={{ fontFamily: "'IBM Plex Mono', monospace", color: C.sage }}>loading…</div>
       </div>
     );
   }
@@ -338,9 +340,9 @@ export default function HomeBase() {
               onClick={() => setTab(t.key)}
               style={{
                 ...styles.tabBtn,
-                background: active ? "#1F3D3D" : "#FFFDF8",
-                color: active ? "#FAF7EF" : "#2B2A25",
-                borderColor: active ? "#1F3D3D" : "#E4DCC8",
+                background: active ? C.teal : C.card,
+                color: active ? C.onTeal : C.ink,
+                borderColor: active ? C.teal : C.line,
               }}
             >
               <Icon size={15} strokeWidth={2} />
@@ -517,13 +519,13 @@ function HomeTab({ data, setTab }) {
         <div style={styles.cardLabel}>Today · {todayName}</div>
 
         <div style={{ marginTop: 10 }}>
-          <div style={{ fontSize: 11, color: "#6b6a5e", textTransform: "uppercase", letterSpacing: 0.5 }}>Dinner</div>
+          <div style={{ fontSize: 11, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 0.5 }}>Dinner</div>
           {todaysMeal ? (
-            <button onClick={() => setTab("plan")} style={{ ...styles.linkBtn, marginTop: 2, fontSize: 15, fontFamily: "'Zilla Slab', serif", fontWeight: 600, color: "#2B2A25" }}>
+            <button onClick={() => setTab("plan")} style={{ ...styles.linkBtn, marginTop: 2, fontSize: 15, fontFamily: "'Zilla Slab', serif", fontWeight: 600, color: C.ink }}>
               {todaysMeal.name}
             </button>
           ) : (
-            <div style={{ fontSize: 13.5, color: "#918f7f", fontStyle: "italic", marginTop: 2 }}>
+            <div style={{ fontSize: 13.5, color: C.inkFaint, fontStyle: "italic", marginTop: 2 }}>
               {isWeekday ? "Nothing planned — " : "Weekend — "}
               {readyPortions > 0 ? `${readyPortions} batch portion${readyPortions === 1 ? "" : "s"} ready to reheat` : "check the Plan tab"}
             </div>
@@ -532,14 +534,14 @@ function HomeTab({ data, setTab }) {
 
         {dueTasks.length > 0 && (
           <div style={{ marginTop: 12 }}>
-            <div style={{ fontSize: 11, color: "#6b6a5e", textTransform: "uppercase", letterSpacing: 0.5 }}>Cleaning due</div>
+            <div style={{ fontSize: 11, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 0.5 }}>Cleaning due</div>
             <div style={{ fontSize: 13.5, marginTop: 2 }}>
               {dueTasks.map((t, i) => {
                 const overdueBy = daysOverdue(t);
                 const isOverdue = overdueBy > 0 || (!t.lastDone && t.freq !== "As needed");
                 return (
                   <span key={t.id}>
-                    <span style={isOverdue ? { color: "#B5502F", fontWeight: 700 } : undefined}>{t.name}</span>
+                    <span style={isOverdue ? { color: C.rust, fontWeight: 700 } : undefined}>{t.name}</span>
                     {i < dueTasks.length - 1 ? ", " : ""}
                   </span>
                 );
@@ -550,13 +552,13 @@ function HomeTab({ data, setTab }) {
 
         {attentionItems.length > 0 && (
           <div style={{ marginTop: 12 }}>
-            <div style={{ fontSize: 11, color: "#B5502F", textTransform: "uppercase", letterSpacing: 0.5 }}>Needs attention</div>
-            <div style={{ fontSize: 13.5, marginTop: 2, color: "#B5502F" }}>{attentionItems.join(", ")}</div>
+            <div style={{ fontSize: 11, color: C.rust, textTransform: "uppercase", letterSpacing: 0.5 }}>Needs attention</div>
+            <div style={{ fontSize: 13.5, marginTop: 2, color: C.rust }}>{attentionItems.join(", ")}</div>
           </div>
         )}
 
         {dueTasks.length === 0 && attentionItems.length === 0 && (
-          <div style={{ fontSize: 13.5, color: "#6E7F54", marginTop: 12 }}>Nothing urgent — you're on top of it.</div>
+          <div style={{ fontSize: 13.5, color: C.sage, marginTop: 12 }}>Nothing urgent — you're on top of it.</div>
         )}
       </div>
 
@@ -625,15 +627,15 @@ function HomeTab({ data, setTab }) {
 
 function SummaryCard({ icon: Icon, label, value, alert, onClick }) {
   return (
-    <button onClick={onClick} style={{ ...styles.summaryCard, borderColor: alert ? "#B5502F" : "#E4DCC8" }}>
-      <Icon size={18} color={alert ? "#B5502F" : "#1F3D3D"} strokeWidth={2} />
-      <div style={{ marginTop: 6, fontSize: 12, color: "#6b6a5e", fontFamily: "'Inter', sans-serif" }}>{label}</div>
+    <button onClick={onClick} style={{ ...styles.summaryCard, borderColor: alert ? C.rust : C.line }}>
+      <Icon size={18} color={alert ? C.rust : C.teal} strokeWidth={2} />
+      <div style={{ marginTop: 6, fontSize: 12, color: C.inkSoft, fontFamily: "'Inter', sans-serif" }}>{label}</div>
       <div
         style={{
           fontFamily: "'Zilla Slab', serif",
           fontWeight: 600,
           fontSize: 15,
-          color: alert ? "#B5502F" : "#2B2A25",
+          color: alert ? C.rust : C.ink,
           marginTop: 2,
         }}
       >
@@ -667,8 +669,8 @@ function TapSelect({ value, options, onChange, placeholder, disabled }) {
           opacity: disabled ? 0.5 : 1,
         }}
       >
-        <span style={{ color: selectedOption ? "#2B2A25" : "#918f7f" }}>{selectedOption ? selectedOption.label : placeholder}</span>
-        <ChevronDown size={15} color="#918f7f" style={{ transform: open ? "rotate(180deg)" : "none", flexShrink: 0 }} />
+        <span style={{ color: selectedOption ? C.ink : C.inkFaint }}>{selectedOption ? selectedOption.label : placeholder}</span>
+        <ChevronDown size={15} color={C.inkFaint} style={{ transform: open ? "rotate(180deg)" : "none", flexShrink: 0 }} />
       </button>
       {open && !disabled && (
         <div
@@ -677,8 +679,8 @@ function TapSelect({ value, options, onChange, placeholder, disabled }) {
             top: "calc(100% + 4px)",
             left: 0,
             right: 0,
-            background: "#FFFDF8",
-            border: "1px solid #D8D0BC",
+            background: C.card,
+            border: `1px solid ${C.lineSoft}`,
             borderRadius: 8,
             zIndex: 20,
             maxHeight: 220,
@@ -814,7 +816,7 @@ function PlanTab({ meals, plan, onPlanChange, shoppingList, onShoppingChange, pr
   return (
     <div>
       <SectionTitle>Weekday meal plan</SectionTitle>
-      <div style={{ fontSize: 12.5, color: "#6b6a5e", marginBottom: 12 }}>
+      <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 12 }}>
         Empty days auto-suggest from batch portions first, then what's in stock — pick your own from the shortlist anytime.
       </div>
 
@@ -823,13 +825,13 @@ function PlanTab({ meals, plan, onPlanChange, shoppingList, onShoppingChange, pr
           const suggestion = suggestions[day];
           return (
             <div key={day} style={styles.card}>
-              <div style={{ fontSize: 11, color: "#6b6a5e", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>{day}</div>
+              <div style={{ fontSize: 11, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>{day}</div>
 
               {batch ? (
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
                     <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 15 }}>{batch.name}</div>
-                    <div style={{ fontSize: 11.5, color: "#6E7F54", marginTop: 2 }}>from the freezer</div>
+                    <div style={{ fontSize: 11.5, color: C.sage, marginTop: 2 }}>from the freezer</div>
                   </div>
                   <button style={styles.xBtn} onClick={() => setDay(day, null)}>
                     <X size={14} />
@@ -839,7 +841,7 @@ function PlanTab({ meals, plan, onPlanChange, shoppingList, onShoppingChange, pr
                 <div>
                   <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 15 }}>{meal.name}</div>
                   {meal.url && (
-                    <a href={meal.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#1F3D3D", marginTop: 4, display: "inline-block" }}>
+                    <a href={meal.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: C.teal, marginTop: 4, display: "inline-block" }}>
                       Recipe ↗
                     </a>
                   )}
@@ -849,11 +851,11 @@ function PlanTab({ meals, plan, onPlanChange, shoppingList, onShoppingChange, pr
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 15 }}>{suggestion.label}</div>
                   </div>
-                  <div style={{ fontSize: 11.5, color: "#6E7F54", marginTop: 2 }}>
+                  <div style={{ fontSize: 11.5, color: C.sage, marginTop: 2 }}>
                     {suggestion.type === "batch" ? "suggested — from the freezer" : "suggested — matches what's in stock"}
                   </div>
                   <div style={{ display: "flex", gap: 14, marginTop: 8 }}>
-                    <button style={{ ...styles.linkBtnSmall, color: "#1F3D3D" }} onClick={() => useSuggestion(day)}>
+                    <button style={{ ...styles.linkBtnSmall, color: C.teal }} onClick={() => useSuggestion(day)}>
                       Use this
                     </button>
                     <button style={styles.linkBtnSmall} onClick={() => shuffleSuggestion(day)}>
@@ -862,7 +864,7 @@ function PlanTab({ meals, plan, onPlanChange, shoppingList, onShoppingChange, pr
                   </div>
                 </div>
               ) : (
-                <div style={{ fontSize: 13, color: "#918f7f", fontStyle: "italic" }}>No suggestion available</div>
+                <div style={{ fontSize: 13, color: C.inkFaint, fontStyle: "italic" }}>No suggestion available</div>
               )}
 
               {!batch && (
@@ -1140,9 +1142,9 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
                 ...styles.tabBtn,
                 padding: "5px 10px",
                 fontSize: 11.5,
-                background: active ? "#1F3D3D" : "#FFFDF8",
-                color: active ? "#FAF7EF" : "#2B2A25",
-                borderColor: active ? "#1F3D3D" : "#E4DCC8",
+                background: active ? C.teal : C.card,
+                color: active ? C.paper : C.ink,
+                borderColor: active ? C.teal : C.line,
               }}
             >
               {t}
@@ -1168,9 +1170,9 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
                 onClick={() => toggleMeat(tag)}
                 style={{
                   ...styles.tabBtn,
-                  background: active ? "#1F3D3D" : "#FFFDF8",
-                  color: active ? "#FAF7EF" : "#2B2A25",
-                  borderColor: active ? "#1F3D3D" : "#E4DCC8",
+                  background: active ? C.teal : C.card,
+                  color: active ? C.paper : C.ink,
+                  borderColor: active ? C.teal : C.line,
                 }}
               >
                 {tag}
@@ -1186,12 +1188,12 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
           <div style={{ ...styles.row, alignItems: "flex-start", marginTop: 12 }}>
             <div style={{ flex: 1 }}>
               <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 16 }}>{randomPick.name}</div>
-              <div style={{ fontSize: 12, color: "#6E7F54", marginTop: 2 }}>{(randomPick.tags || []).join(" · ")}</div>
+              <div style={{ fontSize: 12, color: C.sage, marginTop: 2 }}>{(randomPick.tags || []).join(" · ")}</div>
               {randomPick.ingredients?.length > 0 && (
-                <div style={{ fontSize: 12.5, color: "#6b6a5e", marginTop: 6 }}>{randomPick.ingredients.join(", ")}</div>
+                <div style={{ fontSize: 12.5, color: C.inkSoft, marginTop: 6 }}>{randomPick.ingredients.join(", ")}</div>
               )}
               {randomPick.url && (
-                <a href={randomPick.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#1F3D3D", marginTop: 6, display: "inline-block" }}>
+                <a href={randomPick.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: C.teal, marginTop: 6, display: "inline-block" }}>
                   Recipe ↗
                 </a>
               )}
@@ -1200,7 +1202,7 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
                   Reroll
                 </button>
                 <button
-                  style={{ ...styles.linkBtnSmall, color: "#1F3D3D" }}
+                  style={{ ...styles.linkBtnSmall, color: C.teal }}
                   onClick={() => {
                     addMealsToShoppingList([randomPick], shoppingList, onShoppingChange, inventory);
                     addMealsToPrepList([randomPick], prepList, onPrepChange);
@@ -1230,7 +1232,7 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
       </div>
 
       <div style={{ marginTop: 14 }}>
-        <div style={{ fontSize: 11, color: "#6b6a5e", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
+        <div style={{ fontSize: 11, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
           Filter by tag — tap any, matches all selected
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -1244,9 +1246,9 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
                   ...styles.tabBtn,
                   padding: "5px 10px",
                   fontSize: 11.5,
-                  background: active ? "#6E7F54" : "#FFFDF8",
-                  color: active ? "#FAF7EF" : "#2B2A25",
-                  borderColor: active ? "#6E7F54" : "#E4DCC8",
+                  background: active ? C.sage : C.card,
+                  color: active ? C.paper : C.ink,
+                  borderColor: active ? C.sage : C.line,
                 }}
               >
                 {tag}
@@ -1265,7 +1267,7 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
         {filteredList.map((m) => {
           const isSelected = selected.has(m.id);
           return (
-            <div key={m.id} style={{ ...styles.row, alignItems: "flex-start", borderColor: isSelected ? "#1F3D3D" : "#E4DCC8" }}>
+            <div key={m.id} style={{ ...styles.row, alignItems: "flex-start", borderColor: isSelected ? C.teal : C.line }}>
               <button
                 onClick={() => toggleSelect(m.id)}
                 style={{ background: "none", border: "none", cursor: "pointer", padding: 0, marginRight: 10, marginTop: 2 }}
@@ -1275,15 +1277,15 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
                     width: 18,
                     height: 18,
                     borderRadius: 4,
-                    border: "2px solid #1F3D3D",
-                    background: isSelected ? "#1F3D3D" : "transparent",
+                    border: `2px solid ${C.teal}`,
+                    background: isSelected ? C.teal : "transparent",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
                     flexShrink: 0,
                   }}
                 >
-                  {isSelected && <Check size={12} color="#FAF7EF" strokeWidth={3} />}
+                  {isSelected && <Check size={12} color={C.paper} strokeWidth={3} />}
                 </span>
               </button>
               <div style={{ flex: 1 }}>
@@ -1296,7 +1298,7 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
                       <button
                         key={tag}
                         onClick={() => toggleMealTag(m.id, tag)}
-                        style={{ ...styles.chip, padding: "3px 8px", fontSize: 10.5, background: "#1F3D3D", color: "#FAF7EF", border: "none", cursor: "pointer" }}
+                        style={{ ...styles.chip, padding: "3px 8px", fontSize: 10.5, background: C.teal, color: C.paper, border: "none", cursor: "pointer" }}
                       >
                         {tag} ×
                       </button>
@@ -1306,14 +1308,14 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
                     <button
                       key={tag}
                       onClick={() => toggleMealTag(m.id, tag)}
-                      style={{ ...styles.chip, padding: "3px 8px", fontSize: 10.5, background: "#F1EBD9", color: "#918f7f", border: "none", cursor: "pointer" }}
+                      style={{ ...styles.chip, padding: "3px 8px", fontSize: 10.5, background: C.inset, color: C.inkFaint, border: "none", cursor: "pointer" }}
                     >
                       + {tag}
                     </button>
                   ))}
                 </div>
                 {m.url && (
-                  <a href={m.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#1F3D3D", marginTop: 6, display: "inline-block" }}>
+                  <a href={m.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: C.teal, marginTop: 6, display: "inline-block" }}>
                     Recipe ↗
                   </a>
                 )}
@@ -1324,8 +1326,8 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
                   onBlur={(e) => setIngredients(m.id, e.target.value)}
                 />
                 {m.prepNotes && (
-                  <div style={{ fontSize: 11.5, color: "#6E7F54", marginTop: 6, lineHeight: 1.4 }}>
-                    <strong style={{ color: "#2B2A25" }}>Weekend prep: </strong>
+                  <div style={{ fontSize: 11.5, color: C.sage, marginTop: 6, lineHeight: 1.4 }}>
+                    <strong style={{ color: C.ink }}>Weekend prep: </strong>
                     {m.prepNotes}
                   </div>
                 )}
@@ -1366,7 +1368,7 @@ function PrepTab({ list, onChange }) {
   return (
     <div>
       <SectionTitle>Weekend prep</SectionTitle>
-      <div style={{ fontSize: 12.5, color: "#6b6a5e", marginBottom: 12 }}>
+      <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 12 }}>
         Cutting, marinating, portioning — no cooking. Select meals on the Meals tab to generate tasks here.
       </div>
 
@@ -1389,7 +1391,7 @@ function PrepTab({ list, onChange }) {
 
       {Object.entries(byMeal).map(([meal, tasks]) => (
         <div key={meal} style={{ marginTop: 16 }}>
-          <div style={{ fontSize: 11, color: "#6b6a5e", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>{meal}</div>
+          <div style={{ fontSize: 11, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>{meal}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {tasks.map((t) => (
               <div key={t.id} style={{ ...styles.row, opacity: t.checked ? 0.5 : 1 }}>
@@ -1402,15 +1404,15 @@ function PrepTab({ list, onChange }) {
                       width: 18,
                       height: 18,
                       borderRadius: 4,
-                      border: "2px solid #6E7F54",
-                      background: t.checked ? "#6E7F54" : "transparent",
+                      border: `2px solid ${C.sage}`,
+                      background: t.checked ? C.sage : "transparent",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
                       flexShrink: 0,
                     }}
                   >
-                    {t.checked && <Check size={12} color="#FAF7EF" strokeWidth={3} />}
+                    {t.checked && <Check size={12} color={C.paper} strokeWidth={3} />}
                   </span>
                   <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 13.5, textDecoration: t.checked ? "line-through" : "none" }}>
                     {t.label}
@@ -1520,7 +1522,7 @@ function ShoppingTab({ list, onChange, inventory, onInventoryChange }) {
       {checked.length > 0 && (
         <div style={{ marginTop: 18 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ fontSize: 12, color: "#6b6a5e", textTransform: "uppercase", letterSpacing: 0.5 }}>
+            <div style={{ fontSize: 12, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 0.5 }}>
               In cart ({checked.length})
             </div>
             <button style={styles.linkBtnSmall} onClick={clearChecked}>
@@ -1556,15 +1558,15 @@ function ShoppingRow({ item, onToggle, onRemove, showPrompt, onAddToInventory, o
               width: 18,
               height: 18,
               borderRadius: 4,
-              border: "2px solid #1F3D3D",
-              background: item.checked ? "#1F3D3D" : "transparent",
+              border: `2px solid ${C.teal}`,
+              background: item.checked ? C.teal : "transparent",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               flexShrink: 0,
             }}
           >
-            {item.checked && <Check size={12} color="#FAF7EF" strokeWidth={3} />}
+            {item.checked && <Check size={12} color={C.paper} strokeWidth={3} />}
           </span>
           <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 14, textDecoration: item.checked ? "line-through" : "none" }}>
             {item.name}
@@ -1575,8 +1577,8 @@ function ShoppingRow({ item, onToggle, onRemove, showPrompt, onAddToInventory, o
         </button>
       </div>
       {showPrompt && (
-        <div style={{ ...styles.row, marginTop: 4, background: "#F1EBD9", border: "none", flexWrap: "wrap", gap: 8 }}>
-          <span style={{ fontSize: 12, color: "#2B2A25" }}>Add to inventory?</span>
+        <div style={{ ...styles.row, marginTop: 4, background: C.inset, border: "none", flexWrap: "wrap", gap: 8 }}>
+          <span style={{ fontSize: 12, color: C.ink }}>Add to inventory?</span>
           <div style={{ display: "flex", gap: 6, marginLeft: "auto" }}>
             <button style={{ ...styles.tabBtn, padding: "4px 10px", fontSize: 11.5 }} onClick={() => onAddToInventory(item, "Fridge")}>
               Fridge
@@ -1657,7 +1659,7 @@ function CleaningTab({ list, onChange, equipment, onEquipmentChange, oddJobs, on
     <div>
       <SectionTitle>Cleaning routine</SectionTitle>
       <input
-        style={{ ...styles.input, width: "100%", marginBottom: 12, fontSize: 12.5, color: "#6b6a5e" }}
+        style={{ ...styles.input, width: "100%", marginBottom: 12, fontSize: 12.5, color: C.inkSoft }}
         value={equipment}
         onChange={(e) => onEquipmentChange(e.target.value)}
         placeholder="Equipment notes (e.g. robot vacuum, washer/dryer combo)"
@@ -1686,27 +1688,27 @@ function CleaningTab({ list, onChange, equipment, onEquipmentChange, oddJobs, on
               key={t.id}
               style={{
                 ...styles.row,
-                borderColor: isOverdue ? "#B5502F" : due ? "#D9A62E" : "#E4DCC8",
+                borderColor: isOverdue ? C.rust : due ? C.mustard : C.line,
                 borderWidth: isOverdue ? 2 : 1,
-                background: isOverdue ? "#FBEAE6" : "#FFFDF8",
+                background: isOverdue ? C.rustWash : C.card,
               }}
             >
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  {isOverdue && <AlertTriangle size={15} color="#B5502F" strokeWidth={2.5} />}
+                  {isOverdue && <AlertTriangle size={15} color={C.rust} strokeWidth={2.5} />}
                   <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 15 }}>{t.name}</div>
                 </div>
-                <div style={{ fontSize: 12, color: "#6b6a5e", marginTop: 2 }}>
+                <div style={{ fontSize: 12, color: C.inkSoft, marginTop: 2 }}>
                   {t.freq}
                   {t.freq !== "As needed" && <> · {t.lastDone ? `last done ${new Date(t.lastDone).toLocaleDateString()}` : "never done"}</>}
                   {t.freq === "As needed" && t.lastDone && <> · last done {new Date(t.lastDone).toLocaleDateString()}</>}
                   {isOverdue && (
-                    <span style={{ color: "#B5502F", fontWeight: 700 }}>
+                    <span style={{ color: C.rust, fontWeight: 700 }}>
                       {" "}
                       · {neverDone ? "OVERDUE" : `OVERDUE by ${overdueBy}d`}
                     </span>
                   )}
-                  {due && !isOverdue && <span style={{ color: "#D9A62E", fontWeight: 700 }}> · due today</span>}
+                  {due && !isOverdue && <span style={{ color: C.mustard, fontWeight: 700 }}> · due today</span>}
                 </div>
               </div>
               <div style={{ display: "flex", gap: 6 }}>
@@ -1725,7 +1727,7 @@ function CleaningTab({ list, onChange, equipment, onEquipmentChange, oddJobs, on
 
       <div style={{ marginTop: 24 }}>
         <SectionTitle>Odd jobs</SectionTitle>
-        <div style={{ fontSize: 12.5, color: "#6b6a5e", marginBottom: 10 }}>
+        <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 10 }}>
           One-offs and irregular jobs — fix the fence, book the car service, clean the gutters. No fixed schedule, just a list.
         </div>
 
@@ -1753,9 +1755,9 @@ function CleaningTab({ list, onChange, equipment, onEquipmentChange, oddJobs, on
                 style={{
                   ...styles.row,
                   alignItems: "flex-start",
-                  borderColor: overdue ? "#B5502F" : "#E4DCC8",
+                  borderColor: overdue ? C.rust : C.line,
                   borderWidth: overdue ? 2 : 1,
-                  background: overdue ? "#FBEAE6" : "#FFFDF8",
+                  background: overdue ? C.rustWash : C.card,
                 }}
               >
                 <button
@@ -1767,7 +1769,7 @@ function CleaningTab({ list, onChange, equipment, onEquipmentChange, oddJobs, on
                       width: 18,
                       height: 18,
                       borderRadius: 4,
-                      border: "2px solid #1F3D3D",
+                      border: `2px solid ${C.teal}`,
                       background: "transparent",
                       display: "flex",
                       alignItems: "center",
@@ -1778,11 +1780,11 @@ function CleaningTab({ list, onChange, equipment, onEquipmentChange, oddJobs, on
                   />
                   <div>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      {overdue && <AlertTriangle size={15} color="#B5502F" strokeWidth={2.5} />}
+                      {overdue && <AlertTriangle size={15} color={C.rust} strokeWidth={2.5} />}
                       <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 15 }}>{j.name}</div>
                     </div>
                     {(j.dueDate || j.notes) && (
-                      <div style={{ fontSize: 12, marginTop: 2, color: overdue ? "#B5502F" : "#6b6a5e" }}>
+                      <div style={{ fontSize: 12, marginTop: 2, color: overdue ? C.rust : C.inkSoft }}>
                         {j.dueDate && (
                           <span style={overdue ? { fontWeight: 700 } : undefined}>
                             due {dueDate.toLocaleDateString()}
@@ -1807,7 +1809,7 @@ function CleaningTab({ list, onChange, equipment, onEquipmentChange, oddJobs, on
         {doneJobs.length > 0 && (
           <div style={{ marginTop: 16 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ fontSize: 12, color: "#6b6a5e", textTransform: "uppercase", letterSpacing: 0.5 }}>
+              <div style={{ fontSize: 12, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 0.5 }}>
                 Done ({doneJobs.length})
               </div>
               <button style={styles.linkBtnSmall} onClick={clearDoneJobs}>
@@ -1826,15 +1828,15 @@ function CleaningTab({ list, onChange, equipment, onEquipmentChange, oddJobs, on
                         width: 18,
                         height: 18,
                         borderRadius: 4,
-                        border: "2px solid #1F3D3D",
-                        background: "#1F3D3D",
+                        border: `2px solid ${C.teal}`,
+                        background: C.teal,
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
                         flexShrink: 0,
                       }}
                     >
-                      <Check size={12} color="#FAF7EF" strokeWidth={3} />
+                      <Check size={12} color={C.paper} strokeWidth={3} />
                     </span>
                     <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 14, textDecoration: "line-through" }}>{j.name}</span>
                   </button>
@@ -1952,7 +1954,7 @@ function DogTab({ dogFood, onChange, dogShoppingList, onDogShoppingChange }) {
             <div key={d.id} style={styles.card}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <input
-                  style={{ border: "none", background: "transparent", padding: 0, fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 17, color: "#2B2A25", outline: "none" }}
+                  style={{ border: "none", background: "transparent", padding: 0, fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 17, color: C.ink, outline: "none" }}
                   value={d.name}
                   onChange={(e) => setDog(d.id, { name: e.target.value })}
                 />
@@ -1962,7 +1964,7 @@ function DogTab({ dogFood, onChange, dogShoppingList, onDogShoppingChange }) {
               </div>
 
               {low && (
-                <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#B5502F", fontSize: 13, margin: "8px 0" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, color: C.rust, fontSize: 13, margin: "8px 0" }}>
                   <AlertTriangle size={14} /> Time to reorder
                 </div>
               )}
@@ -1995,7 +1997,7 @@ function DogTab({ dogFood, onChange, dogShoppingList, onDogShoppingChange }) {
                 </Field>
               </div>
 
-              <div style={{ marginTop: 12, fontSize: 13, color: "#6E7F54", fontFamily: "'IBM Plex Mono', monospace" }}>
+              <div style={{ marginTop: 12, fontSize: 13, color: C.sage, fontFamily: "'IBM Plex Mono', monospace" }}>
                 {gPerDay}g/day
                 {daysLeft !== null && <> · ~{daysLeft} day{daysLeft === 1 ? "" : "s"} of supply left</>}
               </div>
@@ -2013,14 +2015,14 @@ function DogTab({ dogFood, onChange, dogShoppingList, onDogShoppingChange }) {
 
       <div style={{ marginTop: 24 }}>
         <SectionTitle>Other foods & treats</SectionTitle>
-        <div style={{ fontSize: 12.5, color: "#6b6a5e", marginBottom: 10 }}>
+        <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 10 }}>
           Extras that aren't part of the daily meal — bones, sardines, patties, treats.
         </div>
 
         <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handlePhoto} />
         <div style={{ ...styles.card, marginBottom: 12 }}>
           <div style={styles.cardLabel}>Stocktake from a photo</div>
-          <div style={{ fontSize: 12.5, color: "#6b6a5e", marginTop: 4 }}>
+          <div style={{ fontSize: 12.5, color: C.inkSoft, marginTop: 4 }}>
             Snap the treat drawer or freezer stash — the photo isn't saved, only the list it finds.
           </div>
           {scanAvailable ? (
@@ -2032,11 +2034,11 @@ function DogTab({ dogFood, onChange, dogShoppingList, onDogShoppingChange }) {
               Photo scanning needs an AI Task set up in Home Assistant — Settings → Devices &amp; Services → Add Integration.
             </div>
           )}
-          {scanError && <div style={{ fontSize: 12.5, color: "#B5502F", marginTop: 8 }}>{scanError}</div>}
+          {scanError && <div style={{ fontSize: 12.5, color: C.rust, marginTop: 8 }}>{scanError}</div>}
 
           {scanResults && (
             <div style={{ marginTop: 12 }}>
-              <div style={{ fontSize: 12, color: "#6b6a5e", marginBottom: 6 }}>
+              <div style={{ fontSize: 12, color: C.inkSoft, marginBottom: 6 }}>
                 Found {scanResults.length} item{scanResults.length === 1 ? "" : "s"} — review and edit:
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -2051,15 +2053,15 @@ function DogTab({ dogFood, onChange, dogShoppingList, onDogShoppingChange }) {
                           width: 18,
                           height: 18,
                           borderRadius: 4,
-                          border: "2px solid #1F3D3D",
-                          background: item.checked ? "#1F3D3D" : "transparent",
+                          border: `2px solid ${C.teal}`,
+                          background: item.checked ? C.teal : "transparent",
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
                           flexShrink: 0,
                         }}
                       >
-                        {item.checked && <Check size={12} color="#FAF7EF" strokeWidth={3} />}
+                        {item.checked && <Check size={12} color={C.paper} strokeWidth={3} />}
                       </span>
                     </button>
                     <input
@@ -2074,7 +2076,7 @@ function DogTab({ dogFood, onChange, dogShoppingList, onDogShoppingChange }) {
                 ))}
               </div>
               <div style={{ display: "flex", gap: 14, marginTop: 10 }}>
-                <button style={{ ...styles.linkBtnSmall, color: "#1F3D3D" }} onClick={confirmScanResults}>
+                <button style={{ ...styles.linkBtnSmall, color: C.teal }} onClick={confirmScanResults}>
                   Add checked items
                 </button>
                 <button style={styles.linkBtnSmall} onClick={() => setScanResults(null)}>
@@ -2097,7 +2099,7 @@ function DogTab({ dogFood, onChange, dogShoppingList, onDogShoppingChange }) {
         </AddRow>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
           {dogFood.extras.map((e) => (
-            <div key={e.id} style={{ ...styles.row, borderColor: e.lowStock ? "#B5502F" : "#E4DCC8" }}>
+            <div key={e.id} style={{ ...styles.row, borderColor: e.lowStock ? C.rust : C.line }}>
               <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 15, flex: 1 }}>{e.name}</div>
               <button
                 onClick={() => toggleExtraLowStock(e.id)}
@@ -2106,9 +2108,9 @@ function DogTab({ dogFood, onChange, dogShoppingList, onDogShoppingChange }) {
                   padding: "4px 10px",
                   fontSize: 11,
                   marginRight: 6,
-                  background: e.lowStock ? "#B5502F" : "#FFFDF8",
-                  color: e.lowStock ? "#FAF7EF" : "#2B2A25",
-                  borderColor: e.lowStock ? "#B5502F" : "#E4DCC8",
+                  background: e.lowStock ? C.rust : C.card,
+                  color: e.lowStock ? C.paper : C.ink,
+                  borderColor: e.lowStock ? C.rust : C.line,
                 }}
               >
                 {e.lowStock ? "Low" : "OK"}
@@ -2124,7 +2126,7 @@ function DogTab({ dogFood, onChange, dogShoppingList, onDogShoppingChange }) {
 
       <div style={{ marginTop: 24 }}>
         <SectionTitle>Dog shopping list</SectionTitle>
-        <div style={{ fontSize: 12.5, color: "#6b6a5e", marginBottom: 10 }}>
+        <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 10 }}>
           Separate from your regular shopping list — dog food and supplies only.
         </div>
         <AddRow>
@@ -2149,15 +2151,15 @@ function DogTab({ dogFood, onChange, dogShoppingList, onDogShoppingChange }) {
                     width: 18,
                     height: 18,
                     borderRadius: 4,
-                    border: "2px solid #1F3D3D",
-                    background: i.checked ? "#1F3D3D" : "transparent",
+                    border: `2px solid ${C.teal}`,
+                    background: i.checked ? C.teal : "transparent",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
                     flexShrink: 0,
                   }}
                 >
-                  {i.checked && <Check size={12} color="#FAF7EF" strokeWidth={3} />}
+                  {i.checked && <Check size={12} color={C.paper} strokeWidth={3} />}
                 </span>
                 <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 14, textDecoration: i.checked ? "line-through" : "none" }}>
                   {i.name}
@@ -2188,7 +2190,7 @@ function NumberStepper({ value, onChange, step = 1, suffix }) {
       </button>
       <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 15, minWidth: 30, textAlign: "center" }}>
         {value}
-        {suffix ? <span style={{ fontSize: 10, color: "#918f7f" }}> {suffix}</span> : ""}
+        {suffix ? <span style={{ fontSize: 10, color: C.inkFaint }}> {suffix}</span> : ""}
       </span>
       <button style={styles.stepBtn} onClick={() => onChange(round1(value + step))}>
         +
@@ -2312,7 +2314,7 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
 
       <div style={{ ...styles.card, marginBottom: 14 }}>
         <div style={styles.cardLabel}>Stocktake from a photo</div>
-        <div style={{ fontSize: 12.5, color: "#6b6a5e", marginTop: 4 }}>
+        <div style={{ fontSize: 12.5, color: C.inkSoft, marginTop: 4 }}>
           Snap a receipt or a shelf of items — the photo isn't saved, only the list it finds.
         </div>
         {scanAvailable ? (
@@ -2324,11 +2326,11 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
             Photo scanning needs an AI Task set up in Home Assistant — Settings → Devices &amp; Services → Add Integration.
           </div>
         )}
-        {scanError && <div style={{ fontSize: 12.5, color: "#B5502F", marginTop: 8 }}>{scanError}</div>}
+        {scanError && <div style={{ fontSize: 12.5, color: C.rust, marginTop: 8 }}>{scanError}</div>}
 
         {scanResults && (
           <div style={{ marginTop: 12 }}>
-            <div style={{ fontSize: 12, color: "#6b6a5e", marginBottom: 6 }}>
+            <div style={{ fontSize: 12, color: C.inkSoft, marginBottom: 6 }}>
               Found {scanResults.length} item{scanResults.length === 1 ? "" : "s"} — review, edit, and pick fridge or freezer:
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -2343,15 +2345,15 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
                         width: 18,
                         height: 18,
                         borderRadius: 4,
-                        border: "2px solid #1F3D3D",
-                        background: item.checked ? "#1F3D3D" : "transparent",
+                        border: `2px solid ${C.teal}`,
+                        background: item.checked ? C.teal : "transparent",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
                         flexShrink: 0,
                       }}
                     >
-                      {item.checked && <Check size={12} color="#FAF7EF" strokeWidth={3} />}
+                      {item.checked && <Check size={12} color={C.paper} strokeWidth={3} />}
                     </span>
                   </button>
                   <input
@@ -2368,9 +2370,9 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
                           ...styles.tabBtn,
                           padding: "4px 8px",
                           fontSize: 11,
-                          background: item.location === loc2 ? "#1F3D3D" : "#FFFDF8",
-                          color: item.location === loc2 ? "#FAF7EF" : "#2B2A25",
-                          borderColor: item.location === loc2 ? "#1F3D3D" : "#E4DCC8",
+                          background: item.location === loc2 ? C.teal : C.card,
+                          color: item.location === loc2 ? C.paper : C.ink,
+                          borderColor: item.location === loc2 ? C.teal : C.line,
                         }}
                       >
                         {loc2}
@@ -2384,7 +2386,7 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
               ))}
             </div>
             <div style={{ display: "flex", gap: 14, marginTop: 10 }}>
-              <button style={{ ...styles.linkBtnSmall, color: "#1F3D3D" }} onClick={confirmScanResults}>
+              <button style={{ ...styles.linkBtnSmall, color: C.teal }} onClick={confirmScanResults}>
                 Add checked items
               </button>
               <button style={styles.linkBtnSmall} onClick={() => setScanResults(null)}>
@@ -2415,7 +2417,7 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
           />
         )}
         <button
-          style={{ ...styles.tabBtn, background: lowStock ? "#B5502F" : "#FFFDF8", color: lowStock ? "#FAF7EF" : "#2B2A25", borderColor: lowStock ? "#B5502F" : "#E4DCC8" }}
+          style={{ ...styles.tabBtn, background: lowStock ? C.rust : C.card, color: lowStock ? C.paper : C.ink, borderColor: lowStock ? C.rust : C.line }}
           onClick={() => setLowStock((v) => !v)}
         >
           {lowStock ? "Marked as running low" : "Mark as running low?"}
@@ -2434,7 +2436,7 @@ function InventoryGroup({ title, icon: Icon, items, onRemove, onToggleLowStock }
   const isPantry = title === "Pantry" || title === "Supplements";
   return (
     <div style={{ marginTop: 18 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#6b6a5e", textTransform: "uppercase", letterSpacing: 0.5 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 0.5 }}>
         <Icon size={13} /> {title} ({items.length})
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
@@ -2442,11 +2444,11 @@ function InventoryGroup({ title, icon: Icon, items, onRemove, onToggleLowStock }
           const days = i.expiry ? Math.ceil((new Date(i.expiry) - new Date()) / 86400000) : null;
           const urgent = (days !== null && days <= 3) || i.lowStock;
           return (
-            <div key={i.id} style={{ ...styles.row, borderColor: urgent ? "#B5502F" : "#E4DCC8" }}>
+            <div key={i.id} style={{ ...styles.row, borderColor: urgent ? C.rust : C.line }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 15 }}>{i.name}</div>
                 {!isPantry && i.expiry && (
-                  <div style={{ fontSize: 12, marginTop: 2, color: urgent ? "#B5502F" : "#6b6a5e" }}>
+                  <div style={{ fontSize: 12, marginTop: 2, color: urgent ? C.rust : C.inkSoft }}>
                     {days < 0 ? "expired" : days === 0 ? "expires today" : `expires in ${days}d`}
                   </div>
                 )}
@@ -2458,9 +2460,9 @@ function InventoryGroup({ title, icon: Icon, items, onRemove, onToggleLowStock }
                   padding: "4px 10px",
                   fontSize: 11,
                   marginRight: 6,
-                  background: i.lowStock ? "#B5502F" : "#FFFDF8",
-                  color: i.lowStock ? "#FAF7EF" : "#2B2A25",
-                  borderColor: i.lowStock ? "#B5502F" : "#E4DCC8",
+                  background: i.lowStock ? C.rust : C.card,
+                  color: i.lowStock ? C.paper : C.ink,
+                  borderColor: i.lowStock ? C.rust : C.line,
                 }}
               >
                 {i.lowStock ? "Low" : "OK"}
@@ -2506,7 +2508,7 @@ function BatchTab({ list, onChange }) {
   return (
     <div>
       <SectionTitle>Batch cooking log</SectionTitle>
-      <div style={{ fontSize: 12.5, color: "#6b6a5e", marginBottom: 12 }}>
+      <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 12 }}>
         What's already cooked and portioned in the freezer — separate from raw ingredients, so "what can I just reheat" has a quick answer.
       </div>
 
@@ -2528,7 +2530,7 @@ function BatchTab({ list, onChange }) {
       </div>
 
       {active.length > 0 && (
-        <div style={{ fontSize: 13, color: "#6E7F54", fontFamily: "'IBM Plex Mono', monospace", margin: "14px 0" }}>
+        <div style={{ fontSize: 13, color: C.sage, fontFamily: "'IBM Plex Mono', monospace", margin: "14px 0" }}>
           {totalPortions} portion{totalPortions === 1 ? "" : "s"} ready to reheat
         </div>
       )}
@@ -2538,7 +2540,7 @@ function BatchTab({ list, onChange }) {
           <div key={b.id} style={styles.row}>
             <div style={{ flex: 1 }}>
               <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 15 }}>{b.name}</div>
-              <div style={{ fontSize: 12, color: "#6b6a5e", marginTop: 2 }}>
+              <div style={{ fontSize: 12, color: C.inkSoft, marginTop: 2 }}>
                 made {new Date(b.dateMade).toLocaleDateString()}
                 {b.notes ? ` · ${b.notes}` : ""}
               </div>
@@ -2554,7 +2556,7 @@ function BatchTab({ list, onChange }) {
 
       {finished.length > 0 && (
         <div style={{ marginTop: 18 }}>
-          <div style={{ fontSize: 11, color: "#6b6a5e", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
+          <div style={{ fontSize: 11, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
             Finished ({finished.length})
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -2651,7 +2653,7 @@ function RecipesTab({ list, onChange }) {
   return (
     <div>
       <SectionTitle>Recipes</SectionTitle>
-      <div style={{ fontSize: 12.5, color: "#6b6a5e", marginBottom: 12 }}>
+      <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 12 }}>
         Full write-ups for your meal ideas — tap one to add or read the steps.
       </div>
 
@@ -2659,7 +2661,7 @@ function RecipesTab({ list, onChange }) {
 
       <div style={{ ...styles.card, marginBottom: 14 }}>
         <div style={styles.cardLabel}>Add from a photo</div>
-        <div style={{ fontSize: 12.5, color: "#6b6a5e", marginTop: 4 }}>
+        <div style={{ fontSize: 12.5, color: C.inkSoft, marginTop: 4 }}>
           A screenshot, cookbook page, or handwritten card — it'll pull out the title, ingredients, and steps for you to check over.
         </div>
         {scanAvailable ? (
@@ -2671,11 +2673,11 @@ function RecipesTab({ list, onChange }) {
             Photo scanning needs an AI Task set up in Home Assistant — Settings → Devices &amp; Services → Add Integration.
           </div>
         )}
-        {scanError && <div style={{ fontSize: 12.5, color: "#B5502F", marginTop: 8 }}>{scanError}</div>}
+        {scanError && <div style={{ fontSize: 12.5, color: C.rust, marginTop: 8 }}>{scanError}</div>}
 
         {draft && (
           <div style={{ marginTop: 14 }}>
-            <div style={{ fontSize: 12, color: "#6b6a5e", marginBottom: 8 }}>Review before saving:</div>
+            <div style={{ fontSize: 12, color: C.inkSoft, marginBottom: 8 }}>Review before saving:</div>
             <Field label="Name">
               <input style={{ ...styles.input, width: "100%" }} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
             </Field>
@@ -2699,7 +2701,7 @@ function RecipesTab({ list, onChange }) {
               />
             </Field>
             <div style={{ display: "flex", gap: 14, marginTop: 10 }}>
-              <button style={{ ...styles.linkBtnSmall, color: "#1F3D3D" }} onClick={saveDraft}>
+              <button style={{ ...styles.linkBtnSmall, color: C.teal }} onClick={saveDraft}>
                 Save recipe
               </button>
               <button style={styles.linkBtnSmall} onClick={() => setDraft(null)}>
@@ -2719,7 +2721,7 @@ function RecipesTab({ list, onChange }) {
 
       {groups.map((g) => (
         <div key={g.tag} style={{ marginTop: 18 }}>
-          <div style={{ fontSize: 11, color: "#6b6a5e", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
+          <div style={{ fontSize: 11, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
             {g.tag} ({g.items.length})
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -2734,26 +2736,26 @@ function RecipesTab({ list, onChange }) {
                     <div>
                       <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 15 }}>{m.name}</div>
                       {!open && m.ingredients?.length > 0 && (
-                        <div style={{ fontSize: 12, color: "#6b6a5e", marginTop: 2 }}>{m.ingredients.join(", ")}</div>
+                        <div style={{ fontSize: 12, color: C.inkSoft, marginTop: 2 }}>{m.ingredients.join(", ")}</div>
                       )}
                     </div>
-                    <ChevronDown size={16} color="#918f7f" style={{ transform: open ? "rotate(180deg)" : "none", flexShrink: 0 }} />
+                    <ChevronDown size={16} color={C.inkFaint} style={{ transform: open ? "rotate(180deg)" : "none", flexShrink: 0 }} />
                   </button>
 
                   {open && (
                     <div style={{ marginTop: 12 }}>
                       {m.ingredients?.length > 0 && (
-                        <div style={{ fontSize: 13, color: "#6b6a5e", marginBottom: 10 }}>
-                          <strong style={{ color: "#2B2A25" }}>Ingredients: </strong>
+                        <div style={{ fontSize: 13, color: C.inkSoft, marginBottom: 10 }}>
+                          <strong style={{ color: C.ink }}>Ingredients: </strong>
                           {m.ingredients.join(", ")}
                         </div>
                       )}
                       {m.url && (
-                        <a href={m.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#1F3D3D", marginBottom: 10, display: "inline-block" }}>
+                        <a href={m.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: C.teal, marginBottom: 10, display: "inline-block" }}>
                           Recipe link ↗
                         </a>
                       )}
-                      <div style={{ fontSize: 11, color: "#6b6a5e", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
+                      <div style={{ fontSize: 11, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
                         Steps
                       </div>
                       <textarea
@@ -2825,11 +2827,11 @@ function RestorePanel() {
         <div style={styles.restoreSheet} onClick={() => !busy && setOpen(false)}>
           <div style={styles.restoreInner} onClick={(e) => e.stopPropagation()}>
             <SectionTitle>Restore a version</SectionTitle>
-            <div style={{ fontSize: 12.5, color: "#6b6a5e", marginBottom: 10 }}>
+            <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 10 }}>
               Every hour a copy is kept, for the last two days, then one a day for a fortnight.
             </div>
 
-            {error && <div style={{ fontSize: 12.5, color: "#B5502F", marginBottom: 8 }}>{error}</div>}
+            {error && <div style={{ fontSize: 12.5, color: C.rust, marginBottom: 8 }}>{error}</div>}
             {snapshots === null && <Empty text="Loading..." />}
             {snapshots?.length === 0 && !error && <Empty text="No restore points yet." />}
 
@@ -2861,53 +2863,53 @@ function AddRow({ children }) {
 function IconBtn({ onClick }) {
   return (
     <button onClick={onClick} style={styles.iconBtn}>
-      <Plus size={16} color="#FAF7EF" strokeWidth={2.5} />
+      <Plus size={16} color={C.paper} strokeWidth={2.5} />
     </button>
   );
 }
 function Empty({ text }) {
-  return <div style={{ fontSize: 13, color: "#918f7f", fontStyle: "italic", padding: "6px 2px" }}>{text}</div>;
+  return <div style={{ fontSize: 13, color: C.inkFaint, fontStyle: "italic", padding: "6px 2px" }}>{text}</div>;
 }
 function Field({ label, children, style }) {
   return (
     <div style={style}>
-      <div style={{ fontSize: 11, color: "#6b6a5e", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 11, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>{label}</div>
       {children}
     </div>
   );
 }
 
 /* ---------------- styles ---------------- */
-const styles = {
+const buildStyles = () => ({
   page: {
     minHeight: "100vh",
-    background: "#FAF7EF",
+    background: C.paper,
     fontFamily: "'Inter', sans-serif",
-    color: "#2B2A25",
+    color: C.ink,
     paddingBottom: 32,
   },
   header: {
-    background: "#1F3D3D",
+    background: C.teal,
     padding: "18px 16px",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     gap: 12,
   },
-  punch: { width: 6, height: 6, borderRadius: "50%", background: "#D9A62E" },
+  punch: { width: 6, height: 6, borderRadius: "50%", background: C.mustard },
   saveStatusBar: {
     textAlign: "center",
     fontSize: 11,
     fontFamily: "'IBM Plex Mono', monospace",
-    color: "#6E7F54",
+    color: C.sage,
     padding: "4px 0",
-    background: "#F1EBD9",
+    background: C.inset,
   },
   h1: {
     fontFamily: "'Zilla Slab', serif",
     fontWeight: 700,
     fontSize: 22,
-    color: "#FAF7EF",
+    color: C.paper,
     letterSpacing: 0.5,
     margin: 0,
   },
@@ -2916,7 +2918,7 @@ const styles = {
     flexWrap: "wrap",
     gap: 8,
     padding: "12px 12px",
-    borderBottom: "1px solid #E4DCC8",
+    borderBottom: `1px solid ${C.line}`,
     justifyContent: "center",
   },
   tabBtn: {
@@ -2942,7 +2944,7 @@ const styles = {
   },
   grid2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 },
   summaryCard: {
-    background: "#FFFDF8",
+    background: C.card,
     border: "1.5px solid",
     borderRadius: 10,
     padding: "12px 12px",
@@ -2950,17 +2952,17 @@ const styles = {
     cursor: "pointer",
   },
   card: {
-    background: "#FFFDF8",
-    border: "1px solid #E4DCC8",
+    background: C.card,
+    border: `1px solid ${C.line}`,
     borderRadius: 12,
     padding: 14,
     marginBottom: 14,
   },
-  cardLabel: { fontSize: 11, color: "#6b6a5e", textTransform: "uppercase", letterSpacing: 0.5 },
+  cardLabel: { fontSize: 11, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 0.5 },
   linkBtn: {
     background: "none",
     border: "none",
-    color: "#1F3D3D",
+    color: C.teal,
     fontFamily: "'Inter', sans-serif",
     fontSize: 12.5,
     fontWeight: 600,
@@ -2968,10 +2970,10 @@ const styles = {
     cursor: "pointer",
     padding: 0,
   },
-  linkBtnSmall: { background: "none", border: "none", color: "#B5502F", fontSize: 12, cursor: "pointer" },
+  linkBtnSmall: { background: "none", border: "none", color: C.rust, fontSize: 12, cursor: "pointer" },
   chip: {
-    background: "#F1EBD9",
-    color: "#2B2A25",
+    background: C.inset,
+    color: C.ink,
     fontSize: 12,
     padding: "5px 10px",
     borderRadius: 999,
@@ -2981,21 +2983,21 @@ const styles = {
     flex: 1,
     padding: "9px 11px",
     borderRadius: 8,
-    border: "1px solid #D8D0BC",
-    background: "#FFFDF8",
+    border: `1px solid ${C.lineSoft}`,
+    background: C.card,
     fontFamily: "'Inter', sans-serif",
     fontSize: 14,
     outline: "none",
-    color: "#2B2A25",
+    color: C.ink,
   },
   select: {
     padding: "9px 8px",
     borderRadius: 8,
-    border: "1px solid #D8D0BC",
-    background: "#FFFDF8",
+    border: `1px solid ${C.lineSoft}`,
+    background: C.card,
     fontFamily: "'Inter', sans-serif",
     fontSize: 13,
-    color: "#2B2A25",
+    color: C.ink,
   },
   tapOption: {
     display: "block",
@@ -3004,14 +3006,14 @@ const styles = {
     padding: "10px 12px",
     background: "none",
     border: "none",
-    borderBottom: "1px solid #F1EBD9",
+    borderBottom: `1px solid ${C.inset}`,
     fontFamily: "'Inter', sans-serif",
     fontSize: 13.5,
-    color: "#2B2A25",
+    color: C.ink,
     cursor: "pointer",
   },
   iconBtn: {
-    background: "#1F3D3D",
+    background: C.teal,
     border: "none",
     borderRadius: 8,
     width: 38,
@@ -3025,25 +3027,25 @@ const styles = {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    background: "#FFFDF8",
-    border: "1px solid #E4DCC8",
+    background: C.card,
+    border: `1px solid ${C.line}`,
     borderRadius: 10,
     padding: "10px 12px",
   },
   xBtn: {
     background: "none",
     border: "none",
-    color: "#918f7f",
+    color: C.inkFaint,
     cursor: "pointer",
     padding: 4,
     display: "flex",
   },
-  xBtnGhost: { background: "none", border: "none", color: "#c9c3ae", cursor: "pointer", display: "flex" },
+  xBtnGhost: { background: "none", border: "none", color: C.lineSoft, cursor: "pointer", display: "flex" },
   doneBtn: {
-    background: "#6E7F54",
+    background: C.sage,
     border: "none",
     borderRadius: 6,
-    color: "#FAF7EF",
+    color: C.paper,
     width: 26,
     height: 26,
     display: "flex",
@@ -3055,41 +3057,41 @@ const styles = {
     width: 28,
     height: 28,
     borderRadius: 6,
-    border: "1px solid #D8D0BC",
-    background: "#FFFDF8",
+    border: `1px solid ${C.lineSoft}`,
+    background: C.card,
     fontSize: 16,
     lineHeight: "16px",
     cursor: "pointer",
-    color: "#2B2A25",
+    color: C.ink,
   },
   calendarRow: {
     display: "flex",
     alignItems: "baseline",
     gap: 8,
     padding: "5px 0",
-    borderBottom: "1px solid #F1EBD9",
+    borderBottom: `1px solid ${C.inset}`,
     fontSize: 13.5,
   },
   calendarTime: {
     fontFamily: "'IBM Plex Mono', monospace",
     fontSize: 11,
-    color: "#6E7F54",
+    color: C.sage,
     minWidth: 52,
     flexShrink: 0,
   },
   calendarSource: {
     fontFamily: "'IBM Plex Mono', monospace",
     fontSize: 10,
-    color: "#918f7f",
+    color: C.inkFaint,
     flexShrink: 0,
   },
   scanUnavailable: {
     marginTop: 10,
     fontSize: 12,
     lineHeight: 1.45,
-    color: "#6b6a5e",
-    background: "#F1EBD9",
-    border: "1px dashed #d8cfb4",
+    color: C.inkSoft,
+    background: C.inset,
+    border: `1px dashed ${C.lineDashed}`,
     borderRadius: 8,
     padding: "9px 11px",
   },
@@ -3104,7 +3106,7 @@ const styles = {
     cursor: "pointer",
     fontFamily: "'IBM Plex Mono', monospace",
     fontSize: 11,
-    color: "#6E7F54",
+    color: C.sage,
     textDecoration: "underline",
     padding: 0,
   },
@@ -3118,7 +3120,7 @@ const styles = {
     zIndex: 50,
   },
   restoreInner: {
-    background: "#FFFDF8",
+    background: C.card,
     borderRadius: "14px 14px 0 0",
     width: "100%",
     maxWidth: 520,
@@ -3132,12 +3134,12 @@ const styles = {
     justifyContent: "space-between",
     gap: 10,
     padding: "9px 0",
-    borderBottom: "1px solid #EFE8D6",
+    borderBottom: `1px solid ${C.line}`,
     fontSize: 13,
   },
   addSpendBtn: {
     marginTop: 10,
-    background: "#D9A62E",
+    background: C.mustard,
     border: "none",
     borderRadius: 8,
     padding: "9px 14px",
@@ -3147,17 +3149,17 @@ const styles = {
     fontFamily: "'Inter', sans-serif",
     fontSize: 13,
     fontWeight: 600,
-    color: "#2B2A25",
+    color: C.ink,
     cursor: "pointer",
   },
   receiptWrap: { marginTop: 18, filter: "drop-shadow(0 3px 6px rgba(0,0,0,0.08))" },
   receipt: {
-    background: "#FFFDF8",
-    border: "1px solid #E4DCC8",
-    borderTop: "3px dashed #D8D0BC",
+    background: C.card,
+    border: `1px solid ${C.line}`,
+    borderTop: `3px dashed ${C.lineSoft}`,
     padding: "16px 14px 10px",
   },
-  receiptDivider: { borderTop: "1px dashed #D8D0BC", margin: "8px 0" },
+  receiptDivider: { borderTop: `1px dashed ${C.lineSoft}`, margin: "8px 0" },
   receiptRow: {
     display: "flex",
     justifyContent: "space-between",
@@ -3167,8 +3169,12 @@ const styles = {
   receiptZigzag: {
     height: 10,
     background:
-      "linear-gradient(-45deg, #FAF7EF 4px, transparent 0), linear-gradient(45deg, #FAF7EF 4px, transparent 0)",
+      `linear-gradient(-45deg, ${C.paper} 4px, transparent 0), linear-gradient(45deg, ${C.paper} 4px, transparent 0)`,
     backgroundSize: "10px 10px",
-    backgroundColor: "#FFFDF8",
+    backgroundColor: C.card,
   },
-};
+});
+
+// Every read of styles.x rebuilds against the current palette, so the
+// whole app re-skins when the theme flips without touching call sites.
+const styles = new Proxy({}, { get: (_, key) => buildStyles()[key] });
