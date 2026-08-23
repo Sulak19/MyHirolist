@@ -9,6 +9,8 @@
 // down. The household should still be able to read its shopping list when
 // AI Task is misconfigured.
 
+import { wsCommand } from "./ws.js";
+
 const CORE = process.env.HA_CORE_URL ?? "http://supervisor/core/api";
 const TOKEN = process.env.SUPERVISOR_TOKEN ?? "";
 const TIMEOUT_MS = 15000;
@@ -166,4 +168,62 @@ export async function removeTodoItem(entityId, uid) {
     method: "POST",
     body: { entity_id: entityId, item: uid },
   });
+}
+
+// --- Calendars ---------------------------------------------------------
+//
+// Creating and reading go over REST. Reading uses /api/calendars/<entity>
+// rather than the calendar.get_events action, because only the REST endpoint
+// returns each event's uid -- and without a uid nothing can be deleted later.
+
+export async function listCalendars() {
+  const calendars = await call("/calendars");
+  return Array.isArray(calendars) ? calendars : [];
+}
+
+function normaliseEvent(event) {
+  const start = event.start?.date ?? event.start?.dateTime ?? event.start;
+  const end = event.end?.date ?? event.end?.dateTime ?? event.end;
+
+  return {
+    uid: event.uid ?? null,
+    recurrenceId: event.recurrence_id ?? null,
+    summary: event.summary ?? "",
+    description: event.description ?? "",
+    start,
+    end,
+    // All-day events carry a plain date; timed ones carry a full timestamp.
+    allDay: Boolean(event.start?.date) || (typeof start === "string" && start.length === 10),
+    date: typeof start === "string" ? start.slice(0, 10) : null,
+  };
+}
+
+export async function getCalendarEvents(entityId, startIso, endIso) {
+  const events = await call(
+    `/calendars/${entityId}?start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}`
+  );
+  return Array.isArray(events) ? events.map(normaliseEvent) : [];
+}
+
+export async function createCalendarEvent(entityId, { summary, description, date, endDate }) {
+  await call("/services/calendar/create_event", {
+    method: "POST",
+    body: {
+      entity_id: entityId,
+      summary,
+      description,
+      // All-day event. end_date is exclusive, so it is the following day.
+      start_date: date,
+      end_date: endDate,
+    },
+  });
+}
+
+export async function deleteCalendarEvent(entityId, uid, recurrenceId) {
+  const payload = { type: "calendar/event/delete", entity_id: entityId, uid };
+  if (recurrenceId) {
+    payload.recurrence_id = recurrenceId;
+    payload.recurrence_range = "THISEVENT";
+  }
+  await wsCommand(payload, { token: TOKEN });
 }

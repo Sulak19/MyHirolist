@@ -28,7 +28,39 @@ It then shows up in the Home Assistant sidebar, on the phone app too.
 | Option | Default | What it does |
 |---|---|---|
 | `sync_shopping_list` | `true` | Mirrors the shopping list to Home Assistant's own to-do list, both ways. Turn off to keep the app's list private to the app. |
+| `sync_calendar` | `true` | Puts dinners, cleaning due dates, and food expiry on a calendar. |
+| `calendar_entity` | `calendar.home_base` | Which calendar to write to. See below. |
 | `log_level` | `info` | Set to `debug` when something needs diagnosing. |
+
+## The calendar
+
+Anything with a date goes on a calendar; anything that is just a list stays a
+to-do list. So dinners, chores, and expiry dates are calendar events, while
+the shopping list stays on `todo.shopping_list` where voice already works.
+
+**Set it up once:** Settings → Devices & Services → **Add Integration** →
+**Local Calendar** → name it **Home Base**. That creates
+`calendar.home_base`, which is what the add-on writes to by default. Restart
+the add-on afterwards.
+
+Give it its own calendar rather than pointing it at one you already use. The
+add-on deletes and rewrites its own events as things change, and a calendar
+it owns outright cannot take anything of yours with it.
+
+What lands there:
+
+- **Dinners** — this week's plan, on the matching weekday.
+- **Cleaning** — each task on the date it is *next* due, not merely "today".
+  Marking one done moves its event forward automatically. "As needed" tasks
+  have no date, so they stay off the calendar.
+- **Expiring food** — anything in the kitchen inventory with an expiry date.
+
+It is a one-way mirror. The app is the place to make changes; edits made to
+the events themselves are overwritten on the next sync.
+
+The Home tab also reads **today's events back out of Home Assistant** —
+across every calendar it knows about, not just this one — so it shows the
+household's actual day, bin collections and all.
 
 ## What it adds to Home Assistant
 
@@ -42,6 +74,10 @@ It then shows up in the Home Assistant sidebar, on the phone app too.
 
 **Shopping list**: the app and `todo.shopping_list` stay in step, so "add
 milk to the shopping list" said to a voice assistant shows up in the app.
+
+**Calendar**: `calendar.home_base` carries dinners, cleaning due dates, and
+food expiry, so they appear on dashboards and in Assist alongside everything
+else.
 
 Dashboard cards and an hourly update-check automation are in
 [`docs/homeassistant/`](docs/homeassistant/).

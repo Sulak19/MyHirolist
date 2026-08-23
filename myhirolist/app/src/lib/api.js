@@ -132,3 +132,15 @@ export async function restoreSnapshot(id) {
   currentRev = payload.rev ?? currentRev;
   return payload.data;
 }
+
+// Today's events across every calendar Home Assistant knows about -- the
+// app's own projections plus any personal or household calendars.
+export async function getToday() {
+  if (PREVIEW) return { events: [], available: false };
+  try {
+    const res = await fetch(`${BASE}/today`);
+    return res.ok ? await res.json() : { events: [], available: false };
+  } catch {
+    return { events: [], available: false };
+  }
+}

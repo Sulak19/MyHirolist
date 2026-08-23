@@ -14,6 +14,7 @@ import { createStore } from "./store.js";
 import { computeSummary, sensorsFrom } from "./summary.js";
 import * as ha from "./ha.js";
 import { createShoppingSync } from "./sync.js";
+import { createCalendarSync, createTodayFeed } from "./calendarSync.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -21,6 +22,8 @@ const PORT = Number(process.env.PORT ?? 8099);
 const DATA_DIR = process.env.DATA_DIR ?? "/data";
 const WEB_ROOT = process.env.WEB_ROOT ?? path.join(HERE, "..", "www");
 const SYNC_SHOPPING = process.env.SYNC_SHOPPING_LIST !== "false";
+const SYNC_CALENDAR = process.env.SYNC_CALENDAR !== "false";
+const CALENDAR_ENTITY = process.env.CALENDAR_ENTITY || "calendar.home_base";
 const LOG_LEVEL = process.env.LOG_LEVEL ?? "info";
 
 const SENSOR_REFRESH_MS = 60000; // HA forgets REST-set states on restart
@@ -171,6 +174,8 @@ function handleEvents(req, res) {
 // --- Home Assistant side effects --------------------------------------
 
 let shoppingSync = null;
+let calendarSync = null;
+let todayFeed = null;
 
 async function publishSensors(state) {
   if (!capabilities.homeAssistant) return;
@@ -189,7 +194,12 @@ async function publishSensors(state) {
 
 async function handleApi(req, res, pathname) {
   if (pathname === "/api/capabilities" && req.method === "GET") {
-    return sendJson(res, 200, { ...capabilities, syncShoppingList: SYNC_SHOPPING });
+    return sendJson(res, 200, {
+      ...capabilities,
+      syncShoppingList: SYNC_SHOPPING,
+      calendar: Boolean(calendarSync),
+      calendarEntity: calendarSync ? CALENDAR_ENTITY : null,
+    });
   }
 
   if (pathname === "/api/data" && req.method === "GET") {
@@ -222,6 +232,16 @@ async function handleApi(req, res, pathname) {
 
   if (pathname === "/api/events" && req.method === "GET") {
     return handleEvents(req, res);
+  }
+
+  if (pathname === "/api/today" && req.method === "GET") {
+    if (!todayFeed) return sendJson(res, 200, { events: [], available: false });
+    try {
+      return sendJson(res, 200, { events: await todayFeed(), available: true });
+    } catch (error) {
+      log("warn", "could not read today's calendars:", error.message);
+      return sendJson(res, 200, { events: [], available: false, error: error.message });
+    }
   }
 
   if (pathname === "/api/snapshots" && req.method === "GET") {
@@ -285,6 +305,7 @@ store.onChange((state) => {
   broadcast(state);
   publishSensors(state).catch((error) => log("warn", "sensor publish failed:", error.message));
   if (shoppingSync) shoppingSync.onLocalChange(state);
+  if (calendarSync) calendarSync.onLocalChange(state);
 });
 
 server.listen(PORT, "0.0.0.0", async () => {
@@ -312,11 +333,34 @@ server.listen(PORT, "0.0.0.0", async () => {
   } else if (SYNC_SHOPPING) {
     log("info", "no to-do list found in Home Assistant; shopping stays app-only.");
   }
+
+  if (capabilities.homeAssistant) {
+    todayFeed = createTodayFeed({ ha, log });
+  }
+
+  if (SYNC_CALENDAR && capabilities.homeAssistant) {
+    const calendars = await ha.listCalendars().catch(() => []);
+    const found = calendars.some((calendar) => calendar.entity_id === CALENDAR_ENTITY);
+
+    if (found) {
+      calendarSync = createCalendarSync({ store, ha, entityId: CALENDAR_ENTITY, log });
+      calendarSync.start();
+      log("info", `meals, chores and expiry dates mirrored to ${CALENDAR_ENTITY}`);
+    } else {
+      log(
+        "warn",
+        `${CALENDAR_ENTITY} does not exist, so the calendar is off. Add it in ` +
+          "Settings > Devices & Services > Add Integration > Local Calendar, " +
+          "name it \"Home Base\", then restart this add-on."
+      );
+    }
+  }
 });
 
 function shutdown(signal) {
   log("info", `${signal} received, closing`);
   if (shoppingSync) shoppingSync.stop();
+  if (calendarSync) calendarSync.stop();
   for (const res of subscribers) res.end();
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 5000).unref();

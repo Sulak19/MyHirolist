@@ -24,6 +24,7 @@ import {
 import { loadHouseholdData, saveHouseholdData, subscribeToHouseholdData, scanImageWithClaude, listSnapshots, restoreSnapshot } from "./lib/api.js";
 import { useScanAvailable } from "./lib/useCapabilities.js";
 import { mergeWithDefaults } from "./lib/merge.js";
+import { getToday } from "./lib/api.js";
 
 /* ---------------------------------------------------------
    Home Base — a household dashboard
@@ -425,6 +426,54 @@ export default function HomeBase() {
 }
 
 /* ---------------- HOME ---------------- */
+/* Today, straight from Home Assistant's calendars: the app's own dinners,
+   chores and expiry dates, alongside anything else the household keeps in HA.
+   Renders nothing at all when there is no calendar or nothing on today, so an
+   install without Local Calendar set up looks no different from before. */
+function TodayCalendarCard() {
+  const [feed, setFeed] = useState(null);
+
+  useEffect(() => {
+    let live = true;
+    const load = () => getToday().then((result) => live && setFeed(result));
+
+    load();
+    // Cheap: the server caches for a minute, so this is mostly a no-op that
+    // keeps the card honest if an event is added elsewhere.
+    const timer = setInterval(load, 5 * 60 * 1000);
+
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, []);
+
+  if (!feed?.available || !feed.events?.length) return null;
+
+  const timeOf = (event) => {
+    if (event.allDay) return "all day";
+    const parsed = new Date(event.start);
+    return Number.isNaN(parsed.getTime())
+      ? ""
+      : parsed.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  };
+
+  return (
+    <div style={{ ...styles.card, marginBottom: 12 }}>
+      <div style={styles.cardLabel}>On the calendar today</div>
+      <div style={{ marginTop: 8 }}>
+        {feed.events.map((event, index) => (
+          <div key={`${event.entityId}-${index}`} style={styles.calendarRow}>
+            <span style={styles.calendarTime}>{timeOf(event)}</span>
+            <span style={{ flex: 1 }}>{event.summary}</span>
+            {!event.mine && <span style={styles.calendarSource}>{event.calendar}</span>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function HomeTab({ data, setTab }) {
   const dogStats = data.dogFood.dogs.map((d) => ({
     ...d,
@@ -462,6 +511,8 @@ function HomeTab({ data, setTab }) {
 
   return (
     <div>
+      <TodayCalendarCard />
+
       <div style={styles.card}>
         <div style={styles.cardLabel}>Today · {todayName}</div>
 
@@ -3008,6 +3059,27 @@ const styles = {
     lineHeight: "16px",
     cursor: "pointer",
     color: "#2B2A25",
+  },
+  calendarRow: {
+    display: "flex",
+    alignItems: "baseline",
+    gap: 8,
+    padding: "5px 0",
+    borderBottom: "1px solid #F1EBD9",
+    fontSize: 13.5,
+  },
+  calendarTime: {
+    fontFamily: "'IBM Plex Mono', monospace",
+    fontSize: 11,
+    color: "#6E7F54",
+    minWidth: 52,
+    flexShrink: 0,
+  },
+  calendarSource: {
+    fontFamily: "'IBM Plex Mono', monospace",
+    fontSize: 10,
+    color: "#918f7f",
+    flexShrink: 0,
   },
   scanUnavailable: {
     marginTop: 10,

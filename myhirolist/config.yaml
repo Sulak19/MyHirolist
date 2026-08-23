@@ -16,7 +16,11 @@ hassio_api: true
 homeassistant_api: true
 options:
   sync_shopping_list: true
+  sync_calendar: true
+  calendar_entity: calendar.home_base
   log_level: info
 schema:
   sync_shopping_list: bool
+  sync_calendar: bool
+  calendar_entity: str
   log_level: list(debug|info|warn|error)
