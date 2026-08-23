@@ -1,3 +1,42 @@
+## 1.0.12
+
+feat: shopping driven by stock and forecast, staged put-away, live replanning
+
+Shopping
+- Anything flagged low is on the list whether or not a meal wants it;
+  staples run out between meal plans. Where an item lives beats guessing
+  from its name, so a low 'Tomato passata' in the Pantry is Pantry.
+- Items say which week they are for, and whether they are there because
+  the plan wants them or because stock ran low. An item wanted by both
+  weeks says so once rather than appearing twice.
+- Rows the app added are tinted, so it is obvious which came from the
+  plan and which were typed in.
+
+Ticking off
+- Checking an item means it is in the house: something already tracked
+  stops being low, and anything new is staged under 'Recent shop' with
+  Fridge/Freezer/Pantry/Supplements buttons to put it away. That is where
+  receipt scanning should land too.
+
+Planning
+- The plan is a suggestion, not a decision. Overriding one day pins it
+  and replans the days the app chose around it - and since prep and
+  shopping derive from the plan, both follow. Days before today are left
+  alone; nobody wants Monday's dinner reshuffled on Thursday.
+- Clearing a day now leaves it empty. It used to be refilled immediately
+  by the replan that followed, so a day could not be cleared at all.
+
+Prep
+- This week's food only, plus next week's meals that actually freeze -
+  judged from the household's own prep notes, which mostly say so. Those
+  are labelled as cook-ahead. Chopping salad a week early helps nobody.
+  Portion counts are not invented: meals carry no servings data.
+
+64 app tests, 77 server tests. Verified in a browser: low stock reaches
+the list, week tags and the tint render, and ticking an item off stages
+it into Recent shop. The override-replan path is covered by unit tests
+and confirmed by inspection rather than driven through the UI.
+
 ## 1.0.11
 
 feat: fortnight meal planner, aisle-grouped shopping, grouped prep
