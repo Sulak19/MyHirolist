@@ -1,0 +1,138 @@
+# A native Home Assistant dashboard for the household.
+#
+# This uses the sensors, the calendar, and the shopping list that MyHiroList
+# publishes - so it is built from HA's own cards. On a wall tablet that beats
+# embedding the app: instant load, themed to match everything else, no iframe.
+# The app itself stays one tap away for anything that needs editing.
+#
+# To use:
+#   Settings > Dashboards > Add Dashboard > New dashboard from scratch
+#   Name it "Household", open it, three-dot menu > Edit dashboard >
+#   three-dot menu again > Raw configuration editor, paste all of this in.
+#
+# Replace 79a302d0_myhirolist in the last card with your add-on's slug if it
+# differs - it is in the address bar when you open the app from the sidebar.
+
+title: Household
+views:
+  - title: Today
+    path: today
+    icon: mdi:home-heart
+    type: sections
+    max_columns: 3
+    sections:
+      # ---------------------------------------------------------------
+      - type: grid
+        cards:
+          - type: heading
+            heading: Today
+            heading_style: title
+
+          - type: markdown
+            content: >
+              {{ state_attr('sensor.myhirolist_today', 'full_text')
+                 or states('sensor.myhirolist_today') }}
+
+          - type: tile
+            entity: sensor.myhirolist_dinner_tonight
+            name: Dinner tonight
+            icon: mdi:silverware-fork-knife
+            color: amber
+            tap_action:
+              action: navigate
+              navigation_path: /hassio/ingress/79a302d0_myhirolist
+
+          - type: tile
+            entity: sensor.myhirolist_dinner_tomorrow
+            name: Tomorrow
+            icon: mdi:silverware-fork-knife
+            color: grey
+
+      # ---------------------------------------------------------------
+      - type: grid
+        cards:
+          - type: heading
+            heading: At a glance
+            heading_style: title
+
+          - type: tile
+            entity: sensor.myhirolist_cleaning_due
+            name: Chores due
+            icon: mdi:broom
+            color: teal
+
+          - type: tile
+            entity: sensor.myhirolist_shopping_list
+            name: To buy
+            icon: mdi:cart
+            color: green
+
+          - type: tile
+            entity: sensor.myhirolist_dog_food_days_left
+            name: Dog food
+            icon: mdi:dog-side
+            color: brown
+
+          - type: tile
+            entity: sensor.myhirolist_expiring_soon
+            name: Use up soon
+            icon: mdi:calendar-alert
+            color: orange
+
+          - type: conditional
+            conditions:
+              - condition: numeric_state
+                entity: sensor.myhirolist_cleaning_due
+                above: 0
+            card:
+              type: markdown
+              title: Chores due
+              content: >
+                {% for task in state_attr('sensor.myhirolist_cleaning_due', 'tasks') or [] %}
+                - {{ task }}
+                {% endfor %}
+
+          - type: conditional
+            conditions:
+              - condition: numeric_state
+                entity: sensor.myhirolist_expiring_soon
+                above: 0
+            card:
+              type: markdown
+              title: Use these up
+              content: >
+                {% for item in state_attr('sensor.myhirolist_expiring_soon', 'items') or [] %}
+                - {{ item }}
+                {% endfor %}
+
+      # ---------------------------------------------------------------
+      - type: grid
+        cards:
+          - type: heading
+            heading: Shopping
+            heading_style: title
+
+          # Native to-do card: tick things off here or by voice, and the app
+          # picks it up within seconds.
+          - type: todo-list
+            entity: todo.shopping_list
+
+  # -------------------------------------------------------------------
+  - title: Week
+    path: week
+    icon: mdi:calendar-week
+    cards:
+      - type: calendar
+        initial_view: listWeek
+        entities:
+          - calendar.home_base
+
+  # -------------------------------------------------------------------
+  - title: App
+    path: app
+    icon: mdi:clipboard-list-outline
+    panel: true
+    cards:
+      - type: iframe
+        url: /hassio/ingress/79a302d0_myhirolist
+        aspect_ratio: 100%

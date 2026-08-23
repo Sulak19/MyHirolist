@@ -66,6 +66,10 @@ household's actual day, bin collections and all.
 
 **Sensors**, refreshed every minute:
 
+- `sensor.myhirolist_dinner_tonight` / `_dinner_tomorrow` — expose these to
+  Assist and ask *"what's for dinner?"*
+- `sensor.myhirolist_today` — one readable sentence covering dinner, chores,
+  shopping and expiry, for a morning notification
 - `sensor.myhirolist_shopping_list` — unchecked items
 - `sensor.myhirolist_cleaning_due` — tasks due, with the names as an attribute
 - `sensor.myhirolist_dog_food_days_left` — days until the first dog runs out
@@ -79,8 +83,22 @@ milk to the shopping list" said to a voice assistant shows up in the app.
 food expiry, so they appear on dashboards and in Assist alongside everything
 else.
 
-Dashboard cards and an hourly update-check automation are in
+A complete native dashboard (`dashboard.yaml`), example automations, and
+an hourly update-check automation are in
 [`docs/homeassistant/`](docs/homeassistant/).
+
+### Making it the default view
+
+Add-on panels are not dashboards, so they do not appear in the usual picker.
+Either use the native dashboard above, or wrap the app:
+
+1. **Settings → Dashboards → Add Dashboard → Webpage**, URL
+   `/hassio/ingress/79a302d0_myhirolist` (the slug is in the address bar when
+   you open the app from the sidebar).
+2. Click your name, bottom-left → **Default dashboard** → pick it.
+
+That is per-device, so a kitchen tablet can land on the app while a phone
+keeps the normal view.
 
 ## Photo scan
 

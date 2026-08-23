@@ -115,3 +115,54 @@ test("unknown dog food days left publishes as unknown, not as zero", () => {
 
   assert.equal(sensor.state, "unknown");
 });
+
+// --- dinner and the spoken summary ------------------------------------
+
+import { dinnerFor, describeToday } from "../summary.js";
+
+// A Wednesday, built locally so the weekday is unambiguous in any timezone.
+const WED = new Date(2026, 7, 26, 12, 0, 0).getTime();
+
+test("tonight's dinner comes from the plan for today's weekday", () => {
+  const data = { mealPrep: [{ id: "m1", name: "Karaage" }], weekPlan: { Wednesday: "m1" } };
+  assert.equal(dinnerFor(data, 0, WED), "Karaage");
+});
+
+test("tomorrow's dinner looks one day ahead", () => {
+  const data = { mealPrep: [{ id: "m1", name: "Adobo" }], weekPlan: { Thursday: "m1" } };
+  assert.equal(dinnerFor(data, 1, WED), "Adobo");
+});
+
+test("a batch dinner is named as one, and a missing plan is null", () => {
+  const data = { batchCooking: [{ id: "b1", name: "Bolognese" }], weekPlan: { Wednesday: "batch:b1" } };
+  assert.equal(dinnerFor(data, 0, WED), "Bolognese (batch)");
+  assert.equal(dinnerFor({}, 0, WED), null);
+});
+
+test("the spoken summary reads naturally and only mentions what exists", () => {
+  const quiet = describeToday(computeSummary({}, WED));
+  assert.equal(quiet, "Nothing is planned for dinner.");
+
+  const busy = describeToday(
+    computeSummary(
+      {
+        mealPrep: [{ id: "m1", name: "Karaage" }],
+        weekPlan: { Wednesday: "m1" },
+        cleaning: [{ name: "Toilet", freq: "Weekly", lastDone: null }],
+        shopping: [{ checked: false }, { checked: false }],
+        inventory: [{ name: "Milk", expiry: new Date(WED + DAY).toISOString() }],
+        dogFood: { dogs: [{ packsOnHand: 1, packsPerDay: 1, reorderAtPacks: 5 }], extras: [] },
+      },
+      WED
+    )
+  );
+  assert.equal(
+    busy,
+    "Dinner is Karaage. One chore is due: Toilet. 2 things on the shopping list. Use up soon: Milk. Dog food is running low."
+  );
+});
+
+test("dinner sensors say 'Nothing planned' rather than publishing an empty state", () => {
+  const sensors = sensorsFrom(computeSummary({}, WED));
+  assert.equal(sensors.find((s) => s.objectId === "dinner_tonight").state, "Nothing planned");
+});

@@ -15,6 +15,28 @@ export function isDue(task, nowMs) {
   return (nowMs - new Date(task.lastDone).getTime()) / DAY_MS >= days;
 }
 
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+// The plan is keyed by weekday name and only covers Monday to Friday.
+export function dinnerFor(data, dayOffset, nowMs) {
+  const date = new Date(nowMs);
+  date.setDate(date.getDate() + dayOffset);
+  const weekday = WEEKDAYS[date.getDay()];
+
+  const plan = data?.weekPlan && typeof data.weekPlan === "object" ? data.weekPlan : {};
+  const value = plan[weekday];
+  if (!value) return null;
+
+  if (String(value).startsWith("batch:")) {
+    const id = String(value).slice("batch:".length);
+    const batch = (Array.isArray(data.batchCooking) ? data.batchCooking : []).find((b) => b.id === id);
+    return batch ? `${batch.name} (batch)` : null;
+  }
+
+  const meal = (Array.isArray(data.mealPrep) ? data.mealPrep : []).find((m) => m.id === value);
+  return meal ? meal.name : null;
+}
+
 export function computeSummary(data, nowMs = Date.now()) {
   const shopping = Array.isArray(data?.shopping) ? data.shopping : [];
   const cleaning = Array.isArray(data?.cleaning) ? data.cleaning : [];
@@ -41,7 +63,12 @@ export function computeSummary(data, nowMs = Date.now()) {
 
   const lowStock = inventory.filter((item) => item.lowStock);
 
+  const dinnerTonight = dinnerFor(data, 0, nowMs);
+  const dinnerTomorrow = dinnerFor(data, 1, nowMs);
+
   return {
+    dinnerTonight,
+    dinnerTomorrow,
     shoppingCount: shopping.filter((item) => !item.checked).length,
     cleaningDue: dueTasks.length,
     cleaningDueNames: dueTasks.map((task) => task.name),
@@ -54,9 +81,44 @@ export function computeSummary(data, nowMs = Date.now()) {
   };
 }
 
+// One readable sentence for a morning notification or an Assist answer.
+export function describeToday(summary) {
+  const parts = [];
+
+  if (summary.dinnerTonight) parts.push(`Dinner is ${summary.dinnerTonight}.`);
+  else parts.push("Nothing is planned for dinner.");
+
+  if (summary.cleaningDue === 1) parts.push(`One chore is due: ${summary.cleaningDueNames[0]}.`);
+  else if (summary.cleaningDue > 1) parts.push(`${summary.cleaningDue} chores are due: ${summary.cleaningDueNames.join(", ")}.`);
+
+  if (summary.shoppingCount === 1) parts.push("One thing on the shopping list.");
+  else if (summary.shoppingCount > 1) parts.push(`${summary.shoppingCount} things on the shopping list.`);
+
+  if (summary.expiringSoonCount > 0) parts.push(`Use up soon: ${summary.expiringSoonNames.join(", ")}.`);
+
+  if (summary.dogFoodLow) parts.push("Dog food is running low.");
+
+  return parts.join(" ");
+}
+
 // The sensors published to Home Assistant, derived from the summary above.
 export function sensorsFrom(summary) {
   return [
+    {
+      objectId: "dinner_tonight",
+      state: summary.dinnerTonight ?? "Nothing planned",
+      attributes: { friendly_name: "Dinner tonight", icon: "mdi:silverware-fork-knife" },
+    },
+    {
+      objectId: "dinner_tomorrow",
+      state: summary.dinnerTomorrow ?? "Nothing planned",
+      attributes: { friendly_name: "Dinner tomorrow", icon: "mdi:silverware-fork-knife" },
+    },
+    {
+      objectId: "today",
+      state: describeToday(summary).slice(0, 255), // HA state values are capped at 255 chars
+      attributes: { friendly_name: "Household today", icon: "mdi:home-heart", full_text: describeToday(summary) },
+    },
     {
       objectId: "shopping_list",
       state: summary.shoppingCount,
