@@ -1,3 +1,15 @@
+## 1.0.8
+
+fix: Home tab reads only the Home Base calendar; correct ingress path
+
+Reading every calendar put ten energy-tariff events above the chores on
+the Home tab. Default is now just calendar.home_base. A new
+today_calendars option widens it - 'all', or a comma-separated list -
+for households that want bin collections and the like shown there.
+
+The sidebar opens the add-on at /<slug>, not /hassio/ingress/<slug>;
+the dashboard and README now use the form that actually resolves.
+
 ## 1.0.7
 
 feat: dinner and today sensors, plus a native HA dashboard
