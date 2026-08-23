@@ -30,10 +30,11 @@ jobs:
         working-directory: myhirolist/server
         run: node --test
 
-      - name: App build
+      - name: App tests and build
         working-directory: myhirolist/app
         run: |
           npm ci
+          node --test
           npm run build
 
   publish:

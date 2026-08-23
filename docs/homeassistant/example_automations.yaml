@@ -1,0 +1,128 @@
+# Automations built on the sensors MyHiroList publishes.
+#
+# Before using any of these, find your own notify service: Developer tools >
+# Actions, search "notify". Replace notify.mobile_app_your_phone below with
+# what you find. If you both want them, add a second action.
+#
+# To use one: Settings > Automations & scenes > Create automation > three-dot
+# menu > Edit in YAML, then paste a single block in (not the whole file).
+
+# ---------------------------------------------------------------------
+# 1. Dog food is running low
+# ---------------------------------------------------------------------
+# Fires once when it crosses the threshold, not repeatedly, because the
+# trigger only fires on the transition.
+
+alias: Dog food running low
+description: Warns while there is still time to order more.
+mode: single
+
+triggers:
+  - trigger: numeric_state
+    entity_id: sensor.myhirolist_dog_food_days_left
+    below: 7
+
+actions:
+  - action: notify.mobile_app_your_phone
+    data:
+      title: Dog food running low
+      message: >
+        {{ states('sensor.myhirolist_dog_food_days_left') }} days left.
+      data:
+        tag: myhirolist-dog-food
+
+# ---------------------------------------------------------------------
+# 2. Morning summary
+# ---------------------------------------------------------------------
+# One notification covering everything due, and only when there is
+# something worth saying.
+
+# alias: Household morning summary
+# description: What needs doing today.
+# mode: single
+#
+# triggers:
+#   - trigger: time
+#     at: "07:30:00"
+#
+# conditions:
+#   - condition: template
+#     value_template: >
+#       {{ states('sensor.myhirolist_cleaning_due') | int(0) > 0
+#          or states('sensor.myhirolist_shopping_list') | int(0) > 0
+#          or states('sensor.myhirolist_expiring_soon') | int(0) > 0 }}
+#
+# actions:
+#   - action: notify.mobile_app_your_phone
+#     data:
+#       title: Today at home
+#       message: >
+#         {% set cleaning = state_attr('sensor.myhirolist_cleaning_due', 'tasks') %}
+#         {% set expiring = state_attr('sensor.myhirolist_expiring_soon', 'items') %}
+#         {% if cleaning %}Cleaning: {{ cleaning | join(', ') }}. {% endif %}
+#         {% if states('sensor.myhirolist_shopping_list') | int(0) > 0 %}
+#         {{ states('sensor.myhirolist_shopping_list') }} things to buy. {% endif %}
+#         {% if expiring %}Use up: {{ expiring | join(', ') }}.{% endif %}
+#       data:
+#         tag: myhirolist-morning
+
+# ---------------------------------------------------------------------
+# 3. Something is about to go off
+# ---------------------------------------------------------------------
+
+# alias: Food expiring soon
+# description: Fires when something enters the three-day window.
+# mode: single
+#
+# triggers:
+#   - trigger: numeric_state
+#     entity_id: sensor.myhirolist_expiring_soon
+#     above: 0
+#
+# actions:
+#   - action: notify.mobile_app_your_phone
+#     data:
+#       title: Use these up
+#       message: >
+#         {{ state_attr('sensor.myhirolist_expiring_soon', 'items') | join(', ') }}
+#       data:
+#         tag: myhirolist-expiring
+
+# ---------------------------------------------------------------------
+# 4. Adding to the shopping list by voice
+# ---------------------------------------------------------------------
+# No script needed. The add-on mirrors the app's shopping list to
+# todo.shopping_list, so Home Assistant's built-in handling already works:
+#
+#     "Add milk to my shopping list"
+#
+# It lands in the native list and appears in the app within a few seconds.
+# The same is true in reverse - anything added in the app shows up in Home
+# Assistant, on dashboards, and to Assist.
+#
+# If you would rather the app keep its own list privately, turn off
+# sync_shopping_list in Settings > Apps > MyHiroList > Configuration.
+
+# ---------------------------------------------------------------------
+# 5. Cleaning has been ignored for a while
+# ---------------------------------------------------------------------
+
+# alias: Cleaning piling up
+# description: Nudges when more than five tasks are due.
+# mode: single
+#
+# triggers:
+#   - trigger: numeric_state
+#     entity_id: sensor.myhirolist_cleaning_due
+#     above: 5
+#     for: "06:00:00"
+#
+# actions:
+#   - action: notify.mobile_app_your_phone
+#     data:
+#       title: Cleaning is piling up
+#       message: >
+#         {{ states('sensor.myhirolist_cleaning_due') }} tasks due:
+#         {{ state_attr('sensor.myhirolist_cleaning_due', 'tasks') | join(', ') }}
+#       data:
+#         tag: myhirolist-cleaning

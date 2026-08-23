@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { loadHouseholdData, saveHouseholdData, subscribeToHouseholdData, scanImageWithClaude, listSnapshots, restoreSnapshot } from "./lib/api.js";
 import { useScanAvailable } from "./lib/useCapabilities.js";
+import { mergeWithDefaults } from "./lib/merge.js";
 
 /* ---------------------------------------------------------
    Home Base — a household dashboard
@@ -199,7 +200,7 @@ const DEFAULT_DATA = {
 async function loadState(setData, setLoaded) {
   try {
     const remote = await loadHouseholdData();
-    setData(remote ? { ...DEFAULT_DATA, ...remote } : DEFAULT_DATA);
+    setData(mergeWithDefaults(DEFAULT_DATA, remote));
   } catch (e) {
     console.error("load failed", e);
     setData(DEFAULT_DATA);
@@ -208,33 +209,64 @@ async function loadState(setData, setLoaded) {
   }
 }
 
+// Typing in a text field updates `data` on every keystroke, so saving straight
+// away meant one write -- and one live-sync broadcast to the other phone --
+// per character. Waiting for a pause collapses a burst of typing into one save.
+const SAVE_DEBOUNCE_MS = 800;
+
 function useAutoSave(data, ready, setSaveStatus, setSaveError, isRemoteUpdateRef) {
+  // Whatever has not been written yet, so it can be forced out if the phone
+  // is locked or the tab closed mid-edit.
+  const pendingRef = useRef(null);
+
+  const flush = useCallback(() => {
+    const pending = pendingRef.current;
+    if (!pending) return;
+    pendingRef.current = null;
+
+    saveHouseholdData(pending)
+      .then(() => setSaveStatus("saved"))
+      .catch((e) => {
+        console.error("save failed", e);
+        setSaveStatus("error");
+        setSaveError(e?.message || String(e) || "unknown error");
+      });
+  }, [setSaveStatus, setSaveError]);
+
   useEffect(() => {
     if (!ready) return;
-    // Skip saving right after applying an update that came in from the
-    // realtime subscription (i.e. your partner's phone) — otherwise we'd
-    // immediately write it straight back and bounce updates in a loop.
+
+    // Skip saving right after applying an update that came in from the live
+    // subscription (i.e. your partner's phone) - otherwise we'd immediately
+    // write it straight back and bounce updates in a loop.
     if (isRemoteUpdateRef.current) {
       isRemoteUpdateRef.current = false;
       return;
     }
-    let cancelled = false;
+
+    pendingRef.current = data;
     setSaveStatus("saving");
-    saveHouseholdData(data)
-      .then(() => {
-        if (!cancelled) setSaveStatus("saved");
-      })
-      .catch((e) => {
-        console.error("save failed", e);
-        if (!cancelled) {
-          setSaveStatus("error");
-          setSaveError(e?.message || String(e) || "unknown error");
-        }
-      });
-    return () => {
-      cancelled = true;
+
+    const timer = setTimeout(flush, SAVE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [data, ready, flush, isRemoteUpdateRef, setSaveStatus]);
+
+  // Backgrounding the app is the normal way to leave it on a phone, so an
+  // edit still sitting in the debounce window has to be written out then
+  // rather than quietly lost.
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") flush();
     };
-  }, [data, ready]);
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("pagehide", flush);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("pagehide", flush);
+    };
+  }, [flush]);
 }
 
 const TABS = [
@@ -267,7 +299,7 @@ export default function HomeBase() {
   useEffect(() => {
     const unsubscribe = subscribeToHouseholdData((remoteData) => {
       isRemoteUpdateRef.current = true;
-      setData({ ...DEFAULT_DATA, ...remoteData });
+      setData(mergeWithDefaults(DEFAULT_DATA, remoteData));
     });
     return unsubscribe;
   }, []);
