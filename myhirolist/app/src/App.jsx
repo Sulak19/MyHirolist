@@ -475,7 +475,7 @@ export default function HomeBase() {
         {tab === "batch" && <BatchTab list={data.batchCooking} onChange={(v) => update("batchCooking", v)} />}
       </main>
 
-      <RestorePanel />
+      {groupOf(tab).key === "house" && <RestorePanel />}
     </div>
   );
 }
