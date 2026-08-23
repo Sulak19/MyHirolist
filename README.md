@@ -10,7 +10,9 @@ Home Assistant is.
 
 ## Installing it
 
-1. In Home Assistant, go to **Settings → Add-ons → Add-on Store**.
+1. In Home Assistant, go to **Settings → Apps** (Home Assistant renamed
+   Add-ons to Apps; older docs still say Add-ons), then the **store**
+   button at the bottom right. Or go straight to `/hassio/store`.
 2. Top-right **⋮ → Repositories**, paste:
    `https://github.com/Sulak19/MyHirolist`, click **Add**, then **Close**.
 3. The **MyHiroList** add-on now appears in the store. Click it → **Install**.

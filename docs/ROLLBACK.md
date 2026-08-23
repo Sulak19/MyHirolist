@@ -25,7 +25,7 @@ picks it up within the hour. The app goes back to how it behaved before.
 
 ### If you want it back immediately
 
-In Home Assistant, open **Settings → Add-ons → MyHiroList** and click
+In Home Assistant, open **Settings → Apps → MyHiroList** and click
 **Update** as soon as it appears, rather than waiting for the hourly check.
 
 ### Finding what to revert
@@ -60,7 +60,7 @@ add-on's data.
 
 ## If the add-on will not start at all
 
-1. **Settings → Add-ons → MyHiroList → Log** — the reason is usually the
+1. **Settings → Apps → MyHiroList → Log** — the reason is usually the
    last few lines.
 2. If it started failing right after an update, revert the code as above.
 3. The household data is untouched by a failed start. It lives in `/data`
