@@ -3,7 +3,33 @@
 You do not need anything installed. You do not need to touch Home Assistant.
 You change files in the GitHub repo, and the app at home updates itself.
 
-## The short version
+## First time only: getting set up
+
+**1. Accept the repo invitation.** You will have an email from GitHub
+inviting you to `Sulak19/MyHirolist`, and a notification at
+[github.com/notifications](https://github.com/notifications). Accept it.
+(If you do not have a GitHub account yet, make one first at
+[github.com/signup](https://github.com/signup) — it is free — and say what
+your username is so the invitation can be sent to the right place.)
+
+**2. Connect Claude to the repo.** Sign in at [claude.ai](https://claude.ai)
+and open **Claude Code** at [claude.ai/code](https://claude.ai/code). It will
+ask to connect to GitHub — say yes, and when it asks which repositories it
+may see, grant it **MyHirolist**. You can grant only that one; it does not
+need access to anything else.
+
+**3. Start working.** Pick `Sulak19/MyHirolist` as the repository, then just
+describe what you want in plain English:
+
+> "On the shopping tab, make the checked-off items go grey instead of
+> disappearing."
+
+Claude reads the code, makes the change, and pushes it. You never see a
+terminal.
+
+That is the whole setup. Steps 2 and 3 are the only ones you repeat.
+
+## The short version, every time after that
 
 1. Ask Claude to make the change, connected to the `MyHirolist` repo.
 2. Let it commit and push to `main`.
@@ -47,7 +73,8 @@ Colours and fonts are in `styles` at the bottom.
 
 **You cannot break the app at home.** If a change does not build, it never
 leaves GitHub. The worst case is that nothing happens and there is a red ✗
-next to your commit on the repo's front page.
+next to your commit on the repo's front page. If you see one, tell Claude
+"the build failed, have a look" — it can read the failure and fix it.
 
 **Your data is safe from your changes.** The meals, lists, and inventory
 live in Home Assistant, not in the code. Editing the app does not touch
