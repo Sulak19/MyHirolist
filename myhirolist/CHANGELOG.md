@@ -1,3 +1,38 @@
+## 1.0.5
+
+feat: mirror meals, chores and expiry onto a Home Assistant calendar
+
+Anything with a date becomes a calendar event; anything that is just a
+list stays a to-do list. Dinners land on this week's weekdays, cleaning
+tasks on the date they are NEXT due (so marking one done moves its event
+forward), and inventory items on their expiry date.
+
+The Home tab now also reads today's events back out of Home Assistant,
+across every calendar it knows about, so it shows the real day rather
+than only its own projections.
+
+Notes on the approach:
+
+- One-way. The app owns the data, the calendar mirrors it. Two-way would
+  need conflict resolution and risks duplicate events for little gain.
+- Home Assistant has calendar.create_event and calendar.get_events but no
+  delete or update action, and get_events omits the uid. So creates go
+  over REST, reads use /api/calendars/<entity> (which does return uids),
+  and deletes go over the WebSocket API - hence ws.js. Node 20 hides the
+  WebSocket global behind a flag, so run.sh enables it below Node 22.
+- Only events carrying our marker are ever considered, so anything added
+  to the calendar by hand is invisible to the reconciler and safe.
+- Events outside the sync window are dropped from the plan as well as the
+  read; otherwise a far-future expiry would be invisible to the read,
+  judged missing every pass, and recreated forever.
+- Dates are LOCAL, not UTC. At 9am in Australia the UTC date is still
+  yesterday, which would have put dinners on the wrong day all morning.
+  Tests build their instants locally and pass under UTC, Australia/Sydney
+  and America/Los_Angeles.
+
+Needs a Local Calendar named 'Home Base'. Without it the feature logs how
+to set it up and stays off; the Home tab card renders nothing at all.
+
 ## 1.0.4
 
 feat(app): debounced saves, deep-merged defaults, error boundary
