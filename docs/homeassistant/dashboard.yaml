@@ -40,7 +40,7 @@ views:
             color: amber
             tap_action:
               action: navigate
-              navigation_path: /hassio/ingress/79a302d0_myhirolist
+              navigation_path: /79a302d0_myhirolist
 
           - type: tile
             entity: sensor.myhirolist_dinner_tomorrow
@@ -144,4 +144,4 @@ views:
         hide_state: true
         tap_action:
           action: navigate
-          navigation_path: /hassio/ingress/79a302d0_myhirolist
+          navigation_path: /79a302d0_myhirolist

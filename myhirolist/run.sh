@@ -5,6 +5,7 @@
 export SYNC_SHOPPING_LIST="$(bashio::config 'sync_shopping_list')"
 export SYNC_CALENDAR="$(bashio::config 'sync_calendar')"
 export CALENDAR_ENTITY="$(bashio::config 'calendar_entity')"
+export TODAY_CALENDARS="$(bashio::config 'today_calendars' '')"
 export LOG_LEVEL="$(bashio::config 'log_level')"
 export DATA_DIR=/data
 export WEB_ROOT=/app/www

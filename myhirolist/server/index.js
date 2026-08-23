@@ -24,6 +24,9 @@ const WEB_ROOT = process.env.WEB_ROOT ?? path.join(HERE, "..", "www");
 const SYNC_SHOPPING = process.env.SYNC_SHOPPING_LIST !== "false";
 const SYNC_CALENDAR = process.env.SYNC_CALENDAR !== "false";
 const CALENDAR_ENTITY = process.env.CALENDAR_ENTITY || "calendar.home_base";
+// Which calendars the Home tab reads. Defaults to just ours; "all" widens it,
+// or a comma-separated list picks specific ones.
+const TODAY_CALENDARS = (process.env.TODAY_CALENDARS || "").trim();
 const LOG_LEVEL = process.env.LOG_LEVEL ?? "info";
 
 const SENSOR_REFRESH_MS = 60000; // HA forgets REST-set states on restart
@@ -335,7 +338,13 @@ server.listen(PORT, "0.0.0.0", async () => {
   }
 
   if (capabilities.homeAssistant) {
-    todayFeed = createTodayFeed({ ha, log });
+    const entityIds =
+      TODAY_CALENDARS === "all"
+        ? null
+        : TODAY_CALENDARS
+          ? TODAY_CALENDARS.split(",").map((id) => id.trim()).filter(Boolean)
+          : [CALENDAR_ENTITY];
+    todayFeed = createTodayFeed({ ha, log, entityIds });
   }
 
   if (SYNC_CALENDAR && capabilities.homeAssistant) {

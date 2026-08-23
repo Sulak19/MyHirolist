@@ -119,16 +119,19 @@ export function createCalendarSync({ store, ha, entityId, log, pollMs = 15 * 60 
   };
 }
 
-// Today's events across every calendar Home Assistant knows about, so the
-// Home tab can show the household's actual day rather than only its own
-// projections.
-export function createTodayFeed({ ha, log, cacheMs = 60000 }) {
+// Today's events for the Home tab. By default only the Home Base calendar:
+// reading every calendar sounded good until it surfaced ten energy-tariff
+// events above the chores. `entityIds` can widen it to a chosen set.
+export function createTodayFeed({ ha, log, entityIds = null, cacheMs = 60000 }) {
   let cached = { at: 0, events: [] };
 
   return async function today() {
     if (Date.now() - cached.at < cacheMs) return cached.events;
 
-    const calendars = await ha.listCalendars();
+    const all = await ha.listCalendars();
+    const calendars = entityIds
+      ? all.filter((calendar) => entityIds.includes(calendar.entity_id))
+      : all;
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);

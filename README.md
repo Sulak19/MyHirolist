@@ -30,6 +30,7 @@ It then shows up in the Home Assistant sidebar, on the phone app too.
 | `sync_shopping_list` | `true` | Mirrors the shopping list to Home Assistant's own to-do list, both ways. Turn off to keep the app's list private to the app. |
 | `sync_calendar` | `true` | Puts dinners, cleaning due dates, and food expiry on a calendar. |
 | `calendar_entity` | `calendar.home_base` | Which calendar to write to. See below. |
+| `today_calendars` | *(empty)* | Which calendars the Home tab reads. Empty = just Home Base. `all` = every calendar. Or a comma-separated list. |
 | `log_level` | `info` | Set to `debug` when something needs diagnosing. |
 
 ## The calendar
@@ -58,9 +59,9 @@ What lands there:
 It is a one-way mirror. The app is the place to make changes; edits made to
 the events themselves are overwritten on the next sync.
 
-The Home tab also reads **today's events back out of Home Assistant** —
-across every calendar it knows about, not just this one — so it shows the
-household's actual day, bin collections and all.
+The Home tab also reads **today's events back out of Home Assistant**. By
+default just this calendar; set `today_calendars` to `all`, or to a list, if
+you want bin collections and the like to show there too.
 
 ## What it adds to Home Assistant
 

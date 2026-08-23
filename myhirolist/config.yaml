@@ -18,9 +18,11 @@ options:
   sync_shopping_list: true
   sync_calendar: true
   calendar_entity: calendar.home_base
+  today_calendars: ""
   log_level: info
 schema:
   sync_shopping_list: bool
   sync_calendar: bool
   calendar_entity: str
+  today_calendars: str?
   log_level: list(debug|info|warn|error)
