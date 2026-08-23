@@ -324,13 +324,9 @@ export default function HomeBase() {
         <h1 style={styles.h1}>Home Base</h1>
         <div style={styles.punch} />
       </header>
-      <div style={styles.saveStatusBar}>
-        {saveStatus === "saving" && "Saving…"}
-        {saveStatus === "saved" && "✓ Saved"}
-        {saveStatus === "error" && `⚠ Save failed: ${saveError}`}
-        {saveStatus === "idle" && "\u00A0"}
-      </div>
-      <RestorePanel />
+      {saveStatus === "error" && (
+        <div style={styles.saveStatusBar}>{`⚠ Save failed: ${saveError}`}</div>
+      )}
 
       <nav style={styles.tabStrip}>
         {TABS.map((t) => {
@@ -421,6 +417,8 @@ export default function HomeBase() {
         )}
         {tab === "batch" && <BatchTab list={data.batchCooking} onChange={(v) => update("batchCooking", v)} />}
       </main>
+
+      <RestorePanel />
     </div>
   );
 }
@@ -495,6 +493,8 @@ function HomeTab({ data, setTab }) {
   // ---- Today view ----
   const todayName = new Date().toLocaleDateString("en-US", { weekday: "long" });
   const isWeekday = WEEKDAYS.includes(todayName);
+  // Prep is a weekend job, so suggesting it on a Tuesday is just noise.
+  const isPrepDay = ["Friday", "Saturday", "Sunday"].includes(todayName);
   const todaysMealId = isWeekday ? data.weekPlan?.[todayName] : null;
   const todaysMeal = todaysMealId ? data.mealPrep.find((m) => m.id === todaysMealId) : null;
 
@@ -604,6 +604,7 @@ function HomeTab({ data, setTab }) {
         />
       </div>
 
+      {isPrepDay && (
       <div style={styles.card}>
         <div style={styles.cardLabel}>Meal prep, pick one</div>
         <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -617,6 +618,7 @@ function HomeTab({ data, setTab }) {
           See all ideas →
         </button>
       </div>
+      )}
     </div>
   );
 }
@@ -3094,8 +3096,7 @@ const styles = {
   restoreBar: {
     display: "flex",
     justifyContent: "center",
-    padding: "0 0 6px",
-    background: "#F1EBD9",
+    padding: "18px 0 26px",
   },
   restoreLink: {
     background: "none",
