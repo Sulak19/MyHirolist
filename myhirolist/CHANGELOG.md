@@ -1,3 +1,16 @@
+## 1.0.6
+
+refactor(ui): quieten the chrome, gate meal prep to Friday-Sunday
+
+- The save bar announced 'Saving...' and 'Saved' constantly, which says
+  nothing the user had not already assumed. It now appears only when a
+  save actually fails, which is the case worth interrupting for.
+- 'restore an earlier version' moved from under the header to the foot of
+  the app: still reachable, no longer competing with the content. It also
+  remains in the error boundary, which is where it matters most.
+- Meal prep suggestions only show Friday to Sunday. Prep is a weekend
+  job, so nagging about it on a Tuesday is noise.
+
 ## 1.0.5
 
 feat: mirror meals, chores and expiry onto a Home Assistant calendar
