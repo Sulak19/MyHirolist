@@ -10,8 +10,8 @@
 #   Name it "Household", open it, three-dot menu > Edit dashboard >
 #   three-dot menu again > Raw configuration editor, paste all of this in.
 #
-# Replace 79a302d0_myhirolist in the last card with your add-on's slug if it
-# differs - it is in the address bar when you open the app from the sidebar.
+# Replace 79a302d0_myhirolist wherever it appears with your add-on's slug if
+# it differs - it is in the address bar when you open the app from the sidebar.
 
 title: Household
 views:
@@ -128,11 +128,20 @@ views:
           - calendar.home_base
 
   # -------------------------------------------------------------------
+  # No iframe here on purpose. Home Assistant sends X-Frame-Options:
+  # SAMEORIGIN on its own pages, so an iframe or "Webpage" dashboard that
+  # points at the ingress URL shows "refused to connect". The app is already
+  # a native sidebar panel; this tile simply jumps to it.
   - title: App
     path: app
     icon: mdi:clipboard-list-outline
-    panel: true
     cards:
-      - type: iframe
-        url: /hassio/ingress/79a302d0_myhirolist
-        aspect_ratio: 100%
+      - type: tile
+        entity: sensor.myhirolist_today
+        name: Open MyHiroList
+        icon: mdi:clipboard-list-outline
+        color: teal
+        hide_state: true
+        tap_action:
+          action: navigate
+          navigation_path: /hassio/ingress/79a302d0_myhirolist

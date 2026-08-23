@@ -89,16 +89,15 @@ an hourly update-check automation are in
 
 ### Making it the default view
 
-Add-on panels are not dashboards, so they do not appear in the usual picker.
-Either use the native dashboard above, or wrap the app:
+The app is already a sidebar panel, so it is always one tap away. To make it
+what Home Assistant *opens to*, use the native dashboard above: paste
+`dashboard.yaml` into a new dashboard, then click your name (bottom-left) →
+**Default dashboard** → pick it. That is per-device, so a kitchen tablet can
+land there while a phone keeps the normal view.
 
-1. **Settings → Dashboards → Add Dashboard → Webpage**, URL
-   `/hassio/ingress/79a302d0_myhirolist` (the slug is in the address bar when
-   you open the app from the sidebar).
-2. Click your name, bottom-left → **Default dashboard** → pick it.
-
-That is per-device, so a kitchen tablet can land on the app while a phone
-keeps the normal view.
+Do **not** use a "Webpage" dashboard or an iframe card pointed at the ingress
+URL. Home Assistant sends `X-Frame-Options: SAMEORIGIN` on its own pages, so
+that shows "refused to connect" rather than the app.
 
 ## Photo scan
 
