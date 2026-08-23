@@ -1,3 +1,18 @@
+## 1.0.7
+
+feat: dinner and today sensors, plus a native HA dashboard
+
+sensor.myhirolist_dinner_tonight and _dinner_tomorrow answer 'what's for
+dinner?' through Assist once exposed. sensor.myhirolist_today is one
+readable sentence - dinner, chores, shopping, expiry, dog food - for a
+morning notification, with the untruncated text as an attribute since HA
+caps states at 255 chars.
+
+docs/homeassistant/dashboard.yaml is a complete native dashboard built
+from these sensors, the Home Base calendar and the shopping to-do list.
+On a wall tablet that beats embedding the app: instant, themed, no
+iframe. The app stays one tap away for editing.
+
 ## 1.0.6
 
 refactor(ui): quieten the chrome, gate meal prep to Friday-Sunday
