@@ -271,17 +271,43 @@ function useAutoSave(data, ready, setSaveStatus, setSaveError, isRemoteUpdateRef
   }, [flush]);
 }
 
-const TABS = [
-  { key: "home", label: "Home", icon: HomeIcon },
-  { key: "meals", label: "Meals", icon: UtensilsCrossed },
-  { key: "plan", label: "Plan", icon: Calendar },
-  { key: "prep", label: "Prep", icon: Scissors },
-  { key: "shopping", label: "Shopping", icon: ShoppingCart },
-  { key: "fridge", label: "Kitchen", icon: Refrigerator },
-  { key: "batch", label: "Batch", icon: Boxes },
-  { key: "cleaning", label: "Cleaning", icon: Sparkles },
-  { key: "dog", label: "Dog", icon: Dog },
+// Nine flat tabs was too many thumbs-worth on a phone, and five of them were
+// all "food". Four groups now, each holding the screens it owns. `tab` is still
+// the leaf screen key, so every existing setTab("fridge") link and every
+// tab === "x" branch below works unchanged - only the strip is grouped.
+const GROUPS = [
+  { key: "today", label: "Today", icon: HomeIcon, screens: [{ key: "home", label: "Today" }] },
+  {
+    key: "food",
+    label: "Food",
+    icon: UtensilsCrossed,
+    screens: [
+      { key: "plan", label: "Plan", icon: Calendar },
+      { key: "meals", label: "Meals", icon: UtensilsCrossed },
+      { key: "prep", label: "Prep", icon: Scissors },
+      { key: "batch", label: "Batch", icon: Boxes },
+      { key: "fridge", label: "Kitchen", icon: Refrigerator },
+    ],
+  },
+  { key: "shopping", label: "Shopping", icon: ShoppingCart, screens: [{ key: "shopping", label: "Shopping" }] },
+  {
+    key: "house",
+    label: "House",
+    icon: Sparkles,
+    screens: [
+      { key: "cleaning", label: "Cleaning", icon: Sparkles },
+      { key: "dog", label: "Dog", icon: Dog },
+    ],
+  },
 ];
+
+const groupOf = (screenKey) => GROUPS.find((g) => g.screens.some((s) => s.key === screenKey)) ?? GROUPS[0];
+
+// Inside Home Assistant the app is served through ingress, which already has
+// a header and a sidebar of its own. Drawing a second title bar under it
+// just spends phone height, so the app's own header only appears when it is
+// opened directly or in the preview build.
+const IN_HOME_ASSISTANT = typeof window !== "undefined" && window.location.pathname.includes("/hassio_ingress/");
 
 export default function HomeBase() {
   useTheme();
@@ -321,23 +347,25 @@ export default function HomeBase() {
   return (
     <div style={styles.page}>
       <style>{FONT_IMPORT}</style>
-      <header style={styles.header}>
-        <div style={styles.punch} />
-        <h1 style={styles.h1}>Home Base</h1>
-        <div style={styles.punch} />
-      </header>
+      {!IN_HOME_ASSISTANT && (
+        <header style={styles.header}>
+          <div style={styles.punch} />
+          <h1 style={styles.h1}>Home Base</h1>
+          <div style={styles.punch} />
+        </header>
+      )}
       {saveStatus === "error" && (
         <div style={styles.saveStatusBar}>{`⚠ Save failed: ${saveError}`}</div>
       )}
 
       <nav style={styles.tabStrip}>
-        {TABS.map((t) => {
-          const Icon = t.icon;
-          const active = tab === t.key;
+        {GROUPS.map((g) => {
+          const Icon = g.icon;
+          const active = groupOf(tab).key === g.key;
           return (
             <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
+              key={g.key}
+              onClick={() => setTab(g.screens[0].key)}
               style={{
                 ...styles.tabBtn,
                 background: active ? C.teal : C.card,
@@ -346,11 +374,32 @@ export default function HomeBase() {
               }}
             >
               <Icon size={15} strokeWidth={2} />
-              <span>{t.label}</span>
+              <span>{g.label}</span>
             </button>
           );
         })}
       </nav>
+
+      {groupOf(tab).screens.length > 1 && (
+        <nav style={styles.subStrip}>
+          {groupOf(tab).screens.map((s) => {
+            const active = tab === s.key;
+            return (
+              <button
+                key={s.key}
+                onClick={() => setTab(s.key)}
+                style={{
+                  ...styles.subBtn,
+                  color: active ? C.ink : C.inkSoft,
+                  borderBottomColor: active ? C.mustard : "transparent",
+                }}
+              >
+                {s.label}
+              </button>
+            );
+          })}
+        </nav>
+      )}
 
       <main style={styles.main}>
         {tab === "home" && <HomeTab data={data} setTab={setTab} />}
@@ -2917,9 +2966,28 @@ const buildStyles = () => ({
     display: "flex",
     flexWrap: "wrap",
     gap: 8,
-    padding: "12px 12px",
+    padding: "12px 12px 10px",
     borderBottom: `1px solid ${C.line}`,
     justifyContent: "center",
+  },
+  subStrip: {
+    display: "flex",
+    gap: 4,
+    padding: "0 12px",
+    borderBottom: `1px solid ${C.line}`,
+    overflowX: "auto",
+    justifyContent: "center",
+  },
+  subBtn: {
+    background: "none",
+    border: "none",
+    borderBottom: "2px solid transparent",
+    padding: "9px 12px 8px",
+    fontFamily: "'Inter', sans-serif",
+    fontSize: 12.5,
+    fontWeight: 600,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
   },
   tabBtn: {
     display: "flex",
