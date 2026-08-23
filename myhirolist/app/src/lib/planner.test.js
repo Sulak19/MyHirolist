@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 
 import {
   categoryOf,
+  clearAutoDays,
+  replan,
   committedIngredients,
   availableStock,
   daysSinceCooked,
@@ -200,13 +202,13 @@ test("shopping lists what the plan needs and skips what is stocked", () => {
 });
 
 test("an ingredient wanted by two meals is listed once, citing both", () => {
-  const needs = shoppingNeeds([{ Monday: "hamburg", Tuesday: "bibimbap" }], MEALS, BATCHES, []);
+  const needs = shoppingNeeds([{ plan: { Monday: "hamburg", Tuesday: "bibimbap" }, week: "this" }], MEALS, BATCHES, []);
   const mince = needs.find((n) => n.name === "beef mince");
   assert.deepEqual(mince.forMeals, ["Hamburg", "Bibimbap"]);
 });
 
 test("needs come back in aisle order", () => {
-  const needs = shoppingNeeds([{ Monday: "adobo" }], MEALS, BATCHES, []);
+  const needs = shoppingNeeds([{ plan: { Monday: "adobo" }, week: "this" }], MEALS, BATCHES, []);
   const categories = needs.map((n) => n.category);
   assert.deepEqual(categories, [...categories].sort(
     (a, b) => ["Produce", "Meat & fish", "Dairy", "Pantry", "Frozen", "Other"].indexOf(a)
@@ -216,7 +218,7 @@ test("needs come back in aisle order", () => {
 
 test("plan items are added, hand-added items are never touched", () => {
   const existing = [{ id: "x", name: "Batteries", checked: false }];
-  const { items } = reconcileShopping(existing, shoppingNeeds([{ Monday: "hamburg" }], MEALS, BATCHES, []), []);
+  const { items } = reconcileShopping(existing, shoppingNeeds([{ plan: { Monday: "hamburg" }, week: "this" }], MEALS, BATCHES, []), []);
 
   assert.ok(items.some((i) => i.name === "Batteries" && !i.source), "the household's own item survives");
   assert.ok(items.some((i) => i.name === "beef mince" && i.source === "plan"));
@@ -235,7 +237,7 @@ test("something already bought stays even when the plan changes", () => {
 });
 
 test("a dismissed ingredient does not come back", () => {
-  const needs = shoppingNeeds([{ Monday: "hamburg" }], MEALS, BATCHES, []);
+  const needs = shoppingNeeds([{ plan: { Monday: "hamburg" }, week: "this" }], MEALS, BATCHES, []);
   const { items } = reconcileShopping([], needs, ["beef mince"]);
   assert.ok(!items.some((i) => i.name === "beef mince"));
 });
@@ -246,7 +248,7 @@ test("a dismissal is forgotten once the plan stops wanting the thing", () => {
 });
 
 test("reconciling twice in a row changes nothing", () => {
-  const needs = shoppingNeeds([{ Monday: "hamburg" }], MEALS, BATCHES, []);
+  const needs = shoppingNeeds([{ plan: { Monday: "hamburg" }, week: "this" }], MEALS, BATCHES, []);
   const first = reconcileShopping([], needs, []);
   const second = reconcileShopping(first.items, needs, first.dismissed);
 
@@ -257,7 +259,7 @@ test("reconciling twice in a row changes nothing", () => {
 // --- prep --------------------------------------------------------------
 
 test("prep groups the same ingredient across meals into one job", () => {
-  const tasks = prepTasks([{ Monday: "hamburg", Tuesday: "pancakes" }], MEALS, BATCHES);
+  const tasks = prepTasks({ Monday: "hamburg", Tuesday: "pancakes" }, {}, MEALS, BATCHES);
   const onions = tasks.find((t) => t.label.includes("onions"));
 
   assert.ok(onions, "expected an onions task");
@@ -267,20 +269,20 @@ test("prep groups the same ingredient across meals into one job", () => {
 });
 
 test("protein prep is listed before vegetables", () => {
-  const tasks = prepTasks([{ Monday: "hamburg" }], MEALS, BATCHES);
+  const tasks = prepTasks({ Monday: "hamburg" }, {}, MEALS, BATCHES);
   assert.match(tasks[0].label, /Marinate & portion/);
 });
 
 test("a meal with its own prep notes keeps them verbatim", () => {
   const meals = [{ id: "m", name: "Adobo", ingredients: ["chicken"], prepNotes: "Marinate overnight in soy and vinegar." }];
-  const tasks = prepTasks([{ Monday: "m" }], meals, []);
+  const tasks = prepTasks({ Monday: "m" }, {}, meals, []);
 
   assert.equal(tasks.length, 1);
   assert.equal(tasks[0].label, "Marinate overnight in soy and vinegar.");
 });
 
 test("the same meal on both weeks is prepped once", () => {
-  const tasks = prepTasks([{ Monday: "hamburg" }, { Monday: "hamburg" }], MEALS, BATCHES);
+  const tasks = prepTasks({ Monday: "hamburg" }, { Monday: "hamburg" }, MEALS, BATCHES);
   assert.equal(tasks.filter((t) => t.label.includes("beef mince")).length, 1);
 });
 
@@ -290,4 +292,115 @@ test("a jar is pantry even when its name contains a vegetable", () => {
   // ...but the vegetables themselves still land in produce.
   assert.equal(categoryOf("bean sprouts"), "Produce");
   assert.equal(categoryOf("tomato"), "Produce");
+});
+
+// --- low stock feeds the list -----------------------------------------
+
+test("anything running low is on the list, meal or no meal", () => {
+  const needs = shoppingNeeds([], MEALS, BATCHES, [
+    { name: "Rice", location: "Pantry", lowStock: true },
+    { name: "Sugar", location: "Pantry", lowStock: false },
+  ]);
+  assert.deepEqual(needs.map((n) => n.name), ["Rice"]);
+  assert.deepEqual(needs[0].reasons, ["low"]);
+});
+
+test("a low staple a meal also wants is listed once, for both reasons", () => {
+  const needs = shoppingNeeds(
+    [{ plan: { Monday: "hamburg" }, week: "this" }],
+    MEALS,
+    BATCHES,
+    [{ name: "onions", location: "Pantry", lowStock: true }]
+  );
+  const onions = needs.find((n) => n.name.toLowerCase() === "onions");
+  assert.equal(needs.filter((n) => n.name.toLowerCase() === "onions").length, 1);
+  assert.deepEqual(onions.reasons.sort(), ["low", "meal"]);
+});
+
+test("where a low item lives beats guessing from its name", () => {
+  const needs = shoppingNeeds([], [], [], [{ name: "Tomato passata", location: "Pantry", lowStock: true }]);
+  assert.equal(needs[0].category, "Pantry");
+});
+
+test("items say which week they are for", () => {
+  const needs = shoppingNeeds(
+    [
+      { plan: { Monday: "hamburg" }, week: "this" },
+      { plan: { Monday: "bibimbap" }, week: "next" },
+    ],
+    MEALS,
+    BATCHES,
+    []
+  );
+  const mince = needs.find((n) => n.name === "beef mince");
+  assert.deepEqual(mince.weeks.sort(), ["next", "this"], "both weeks want mince");
+
+  const spinach = needs.find((n) => n.name === "spinach");
+  assert.deepEqual(spinach.weeks, ["next"]);
+});
+
+// --- replanning --------------------------------------------------------
+
+test("replanning keeps hand-picked days and redoes the rest", () => {
+  const plan = { Monday: "karaage", Tuesday: "adobo", Wednesday: "hamburg" };
+  const auto = { Monday: false, Tuesday: true, Wednesday: true };
+
+  const { plan: out } = replan({
+    plan,
+    auto,
+    fromWeekday: null,
+    meals: MEALS,
+    batches: [],
+    inventory: [],
+    mealHistory: [],
+    otherWeekPlan: {},
+    nowMs: NOW,
+  });
+
+  assert.equal(out.Monday, "karaage", "hand-picked days are pinned");
+  assert.ok(out.Tuesday, "the rest get refilled");
+});
+
+test("replanning leaves days before today alone", () => {
+  const plan = { Monday: "karaage", Tuesday: "adobo", Wednesday: null };
+  const auto = { Monday: true, Tuesday: true };
+
+  const cleared = clearAutoDays(plan, auto, "Wednesday");
+  assert.equal(cleared.Monday, "karaage", "already cooked - do not churn it");
+  assert.equal(cleared.Tuesday, "adobo");
+});
+
+test("a day the planner filled is marked as the app's, a manual one is not", () => {
+  const { auto } = replan({
+    plan: { Monday: "karaage" },
+    auto: { Monday: false },
+    fromWeekday: null,
+    meals: MEALS,
+    batches: [],
+    inventory: [],
+    mealHistory: [],
+    otherWeekPlan: {},
+    nowMs: NOW,
+  });
+  assert.equal(auto.Monday, false, "the household chose Monday");
+  assert.equal(auto.Tuesday, true, "the app chose Tuesday");
+});
+
+test("next week is only prepped when the meal actually freezes", () => {
+  const meals = [
+    { id: "freezes", name: "Hamburg", ingredients: ["beef mince"], prepNotes: "Form patties and freeze flat on a tray." },
+    { id: "fresh", name: "Salad", ingredients: ["cucumber"], prepNotes: "Chop on the day, it wilts." },
+  ];
+  const tasks = prepTasks({}, { Monday: "freezes", Tuesday: "fresh" }, meals, []);
+
+  assert.equal(tasks.length, 1);
+  assert.match(tasks[0].label, /freeze flat/);
+  assert.match(tasks[0].label, /cook ahead & freeze for next week/);
+});
+
+test("this week's prep is not labelled as cook-ahead", () => {
+  const meals = [{ id: "m", name: "Hamburg", ingredients: ["beef mince"], prepNotes: "Form patties and freeze." }];
+  const tasks = prepTasks({ Monday: "m" }, {}, meals, []);
+  assert.ok(!tasks[0].label.includes("cook ahead"));
+  assert.equal(tasks[0].week, "this");
 });

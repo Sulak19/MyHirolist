@@ -25,7 +25,7 @@ import { loadHouseholdData, saveHouseholdData, subscribeToHouseholdData, scanIma
 import { useScanAvailable } from "./lib/useCapabilities.js";
 import { mergeWithDefaults } from "./lib/merge.js";
 import { rolloverWeeks, EMPTY_WEEK } from "./lib/weeks.js";
-import { planWeek, shoppingNeeds, reconcileShopping, prepTasks, CATEGORY_ORDER } from "./lib/planner.js";
+import { planWeek, replan, shoppingNeeds, reconcileShopping, prepTasks, CATEGORY_ORDER, locationCategory } from "./lib/planner.js";
 import { getToday } from "./lib/api.js";
 import { C, useTheme } from "./lib/theme.js";
 
@@ -123,6 +123,8 @@ const DEFAULT_DATA = {
   nextWeekPlan: { Monday: null, Tuesday: null, Wednesday: null, Thursday: null, Friday: null },
   planWeekOf: null, // Monday of the week weekPlan belongs to; set on first load
   mealHistory: [], // what was actually eaten, so the planner can vary things
+  weekPlanAuto: {}, // which days the planner chose; the rest are pinned by hand
+  nextWeekPlanAuto: {},
   dismissedShopping: [], // plan ingredients you removed; not re-added behind your back
   cleaning: [
     { id: uid(), name: "Bed sheets", freq: "Weekly", lastDone: null },
@@ -233,7 +235,15 @@ function usePlanShopping(data, setData, ready) {
   useEffect(() => {
     if (!ready || !data) return;
 
-    const needs = shoppingNeeds([data.weekPlan, data.nextWeekPlan], data.mealPrep, data.batchCooking, data.inventory);
+    const needs = shoppingNeeds(
+      [
+        { plan: data.weekPlan, week: "this" },
+        { plan: data.nextWeekPlan, week: "next" },
+      ],
+      data.mealPrep,
+      data.batchCooking,
+      data.inventory
+    );
     const { items, dismissed } = reconcileShopping(data.shopping, needs, data.dismissedShopping);
 
     // Only write when something actually changed, or this loops forever
@@ -446,10 +456,19 @@ export default function HomeBase() {
           <PlanTab
             meals={data.mealPrep}
             plan={planWeek === "next" ? data.nextWeekPlan ?? EMPTY_WEEK : data.weekPlan}
-            onPlanChange={(v) => update(planWeek === "next" ? "nextWeekPlan" : "weekPlan", v)}
+            onPlanChange={(v, auto) =>
+              setData((current) => ({
+                ...current,
+                [planWeek === "next" ? "nextWeekPlan" : "weekPlan"]: v,
+                ...(auto ? { [planWeek === "next" ? "nextWeekPlanAuto" : "weekPlanAuto"]: auto } : {}),
+              }))
+            }
+            planAuto={planWeek === "next" ? data.nextWeekPlanAuto : data.weekPlanAuto}
             planWeek={planWeek}
             onPlanWeekChange={setPlanWeek}
             otherWeekPlan={planWeek === "next" ? data.weekPlan : data.nextWeekPlan ?? EMPTY_WEEK}
+            thisWeekPlan={data.weekPlan}
+            nextWeekPlan={data.nextWeekPlan ?? EMPTY_WEEK}
             mealHistory={data.mealHistory}
             shoppingList={data.shopping}
             onShoppingChange={(v) => update("shopping", v)}
@@ -479,6 +498,30 @@ export default function HomeBase() {
           <ShoppingTab
             list={data.shopping}
             onChange={(v) => update("shopping", v)}
+            onStocked={(item) =>
+              setData((current) => {
+                const key = item.name.trim().toLowerCase();
+                const existing = (current.inventory ?? []).find((i) => i.name.trim().toLowerCase() === key);
+
+                // Already tracked? Then it is simply no longer running low.
+                if (existing) {
+                  return {
+                    ...current,
+                    inventory: current.inventory.map((i) => (i === existing ? { ...i, lowStock: false } : i)),
+                  };
+                }
+
+                // New to the kitchen: park it in Recent shop until someone
+                // says whether it went to the fridge, freezer or pantry.
+                return {
+                  ...current,
+                  inventory: [
+                    { id: uid(), name: item.name.trim(), location: RECENT_SHOP, expiry: null, lowStock: false },
+                    ...(current.inventory ?? []),
+                  ],
+                };
+              })
+            }
             onDismiss={(name) =>
               setData((current) => ({
                 ...current,
@@ -806,6 +849,10 @@ function SummaryCard({ icon: Icon, label, value, alert, onClick }) {
 }
 
 /* ---------------- WEEKDAY PLAN ---------------- */
+// Where shopping lands when it is ticked off, before anyone says which
+// cupboard it went into. Receipt scanning will land here too.
+const RECENT_SHOP = "Recent shop";
+
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
 /* A tappable dropdown that replaces native <select>, which can be unresponsive
@@ -875,23 +922,49 @@ function TapSelect({ value, options, onChange, placeholder, disabled }) {
   );
 }
 
-function PlanTab({ meals, plan, onPlanChange, planWeek: activeWeek, onPlanWeekChange, otherWeekPlan, mealHistory, shoppingList, onShoppingChange, prepList, onPrepChange, selectedMealIds, batchList, onBatchChange, inventory }) {
-  const fillWeek = () =>
-    onPlanChange(
-      planWeek({
-        meals,
-        batches: batchList,
-        inventory,
-        mealHistory,
-        otherWeekPlan,
-        existingPlan: plan,
-      })
-    );
+function PlanTab({ meals, plan, onPlanChange, planAuto, planWeek: activeWeek, onPlanWeekChange, otherWeekPlan, thisWeekPlan, nextWeekPlan, mealHistory, shoppingList, onShoppingChange, prepList, onPrepChange, selectedMealIds, batchList, onBatchChange, inventory }) {
+  const planContext = { meals, batches: batchList, inventory, mealHistory, otherWeekPlan };
+
+  // Filling marks every day it chose as the app's, so a later override knows
+  // which days it is free to reshuffle.
+  const fillWeek = () => {
+    const filled = planWeek({ ...planContext, existingPlan: plan });
+    const auto = {};
+    for (const day of WEEKDAYS) auto[day] = Boolean(filled[day]) && !plan[day] ? true : Boolean(planAuto?.[day]);
+    onPlanChange(filled, auto);
+  };
+
+  // The plan is a suggestion, not a decision. Pick a different meal for one
+  // day and the days the app chose are worked out again around it - and
+  // because prep and shopping are derived from the plan, they follow.
+  // Days already gone are left alone: nobody wants Monday's dinner
+  // reshuffled on Thursday.
+  const todayName = new Date().toLocaleDateString("en-US", { weekday: "long" });
+  const fromWeekday = activeWeek === "next" ? null : WEEKDAYS.includes(todayName) ? todayName : null;
+
+  const setDayAndReplan = (day, mealId) => {
+    // Clearing a day means "leave it empty", so it must not be refilled by
+    // the replan that follows. Pin it empty and stop.
+    if (!mealId) {
+      onPlanChange({ ...plan, [day]: null }, { ...(planAuto ?? {}), [day]: false });
+      return;
+    }
+
+    const pinned = { ...plan, [day]: mealId };
+    const pinnedAuto = { ...(planAuto ?? {}), [day]: false };
+    const { plan: next, auto } = replan({
+      ...planContext,
+      plan: pinned,
+      auto: pinnedAuto,
+      fromWeekday,
+    });
+    onPlanChange(next, auto);
+  };
 
   const selectedMeals = selectedMealIds.map((id) => meals.find((m) => m.id === id)).filter(Boolean);
   const [suggestions, setSuggestions] = useState({}); // day -> { type: 'batch'|'meal', batchId?, mealId?, label, tag? }
 
-  const setDay = (day, mealId) => onPlanChange({ ...plan, [day]: mealId || null });
+  const setDay = (day, mealId) => setDayAndReplan(day, mealId);
 
   const dayAssignments = WEEKDAYS.map((day) => {
     const id = plan[day];
@@ -952,10 +1025,10 @@ function PlanTab({ meals, plan, onPlanChange, planWeek: activeWeek, onPlanWeekCh
     const s = suggestions[day];
     if (!s) return;
     if (s.type === "batch") {
-      onPlanChange({ ...plan, [day]: `batch:${s.batchId}` });
+      onPlanChange({ ...plan, [day]: `batch:${s.batchId}` }, { ...(planAuto ?? {}), [day]: false });
       onBatchChange(batchList.map((b) => (b.id === s.batchId ? { ...b, portions: Math.max(0, b.portions - 1) } : b)));
     } else {
-      onPlanChange({ ...plan, [day]: s.mealId });
+      onPlanChange({ ...plan, [day]: s.mealId }, { ...(planAuto ?? {}), [day]: false });
     }
   };
 
@@ -984,7 +1057,7 @@ function PlanTab({ meals, plan, onPlanChange, planWeek: activeWeek, onPlanWeekCh
   // about prep - and prep is grouped by the job, since three meals wanting
   // onions is one chopping session, not three.
   const addPlannedToLists = () => {
-    const grouped = prepTasks([plan, otherWeekPlan], meals, batchList);
+    const grouped = prepTasks(thisWeekPlan, nextWeekPlan, meals, batchList);
     const existing = new Set(prepList.map((t) => t.label));
     const fresh = grouped
       .filter((task) => !existing.has(task.label))
@@ -1645,7 +1718,7 @@ function PrepTab({ list, onChange }) {
 }
 
 /* ---------------- SHOPPING ---------------- */
-function ShoppingTab({ list, onChange, inventory, onInventoryChange, onDismiss }) {
+function ShoppingTab({ list, onChange, inventory, onInventoryChange, onDismiss, onStocked }) {
   const [name, setName] = useState("");
   const [promptIds, setPromptIds] = useState(new Set());
 
@@ -1658,12 +1731,11 @@ function ShoppingTab({ list, onChange, inventory, onInventoryChange, onDismiss }
     const item = list.find((i) => i.id === id);
     const willBeChecked = item ? !item.checked : false;
     onChange(list.map((i) => (i.id === id ? { ...i, checked: !i.checked } : i)));
-    setPromptIds((prev) => {
-      const next = new Set(prev);
-      if (willBeChecked) next.add(id);
-      else next.delete(id);
-      return next;
-    });
+
+    // Bought means it is in the house. Either it is something already
+    // tracked - so it is no longer low - or it is new and waits in "Recent
+    // shop" until someone says where it went.
+    if (willBeChecked && item) onStocked?.(item);
   };
   const remove = (id) => {
     const item = list.find((i) => i.id === id);
@@ -1782,9 +1854,27 @@ function ShoppingTab({ list, onChange, inventory, onInventoryChange, onDismiss }
 }
 
 function ShoppingRow({ item, onToggle, onRemove, showPrompt, onAddToInventory, onDismissPrompt }) {
+  // Items the planner added are tinted, so it is obvious at a glance which
+  // ones came from the meal plan and which were typed in.
+  const fromPlan = item.source === "plan";
+  const weekLabel = !item.weeks?.length
+    ? null
+    : item.weeks.length > 1
+      ? "both weeks"
+      : item.weeks[0] === "this"
+        ? "this week"
+        : "next week";
+  const isLowStock = item.reasons?.includes("low");
+
   return (
     <div>
-      <div style={{ ...styles.row, opacity: item.checked ? 0.5 : 1 }}>
+      <div
+        style={{
+          ...styles.row,
+          opacity: item.checked ? 0.5 : 1,
+          background: fromPlan ? C.autoTint : undefined,
+        }}
+      >
         <button onClick={() => onToggle(item.id)} style={{ display: "flex", alignItems: "center", gap: 10, background: "none", border: "none", cursor: "pointer", flex: 1, textAlign: "left" }}>
           <span
             style={{
@@ -1801,8 +1891,17 @@ function ShoppingRow({ item, onToggle, onRemove, showPrompt, onAddToInventory, o
           >
             {item.checked && <Check size={12} color={C.paper} strokeWidth={3} />}
           </span>
-          <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 14, textDecoration: item.checked ? "line-through" : "none" }}>
-            {item.name}
+          <span style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
+            <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 14, textDecoration: item.checked ? "line-through" : "none" }}>
+              {item.name}
+            </span>
+            {(weekLabel || isLowStock || item.forMeals?.length) && (
+              <span style={styles.shopMeta}>
+                {isLowStock && <span style={styles.lowTag}>running low</span>}
+                {weekLabel && <span style={styles.weekTag}>{weekLabel}</span>}
+                {item.forMeals?.length > 0 && <span>{item.forMeals.join(", ")}</span>}
+              </span>
+            )}
           </span>
         </button>
         <button style={styles.xBtn} onClick={() => onRemove(item.id)}>
@@ -2132,6 +2231,9 @@ function DogTab({ dogFood, onChange, dogShoppingList, onDogShoppingChange }) {
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState("");
   const [scanResults, setScanResults] = useState(null); // array of { id, name, checked }
+
+  const moveTo = (id, location) =>
+    onChange(list.map((i) => (i.id === id ? { ...i, location } : i)));
 
   const triggerScan = () => fileInputRef.current?.click();
 
@@ -2475,6 +2577,7 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
     }
   };
 
+  const recent = list.filter((i) => i.location === RECENT_SHOP);
   const fridge = list.filter((i) => i.location === "Fridge");
   const freezer = list.filter((i) => i.location === "Freezer");
   const pantry = list.filter((i) => i.location === "Pantry");
@@ -2658,6 +2761,16 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
       </div>
 
       <InventoryGroup title="Fridge" icon={Refrigerator} items={fridge} onRemove={remove} onToggleLowStock={toggleLowStock} />
+      {recent.length > 0 && (
+        <InventoryGroup
+          title={RECENT_SHOP}
+          icon={ShoppingCart}
+          items={recent}
+          onRemove={remove}
+          onToggleLowStock={toggleLowStock}
+          onMove={moveTo}
+        />
+      )}
       <InventoryGroup title="Freezer" icon={Snowflake} items={freezer} onRemove={remove} onToggleLowStock={toggleLowStock} />
       <InventoryGroup title="Pantry" icon={Package} items={pantry} onRemove={remove} onToggleLowStock={toggleLowStock} />
       <InventoryGroup title="Supplements" icon={Pill} items={supplements} onRemove={remove} onToggleLowStock={toggleLowStock} />
@@ -2665,7 +2778,7 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
   );
 }
 
-function InventoryGroup({ title, icon: Icon, items, onRemove, onToggleLowStock }) {
+function InventoryGroup({ title, icon: Icon, items, onRemove, onToggleLowStock, onMove }) {
   const isPantry = title === "Pantry" || title === "Supplements";
   return (
     <div style={{ marginTop: 18 }}>
@@ -2683,6 +2796,16 @@ function InventoryGroup({ title, icon: Icon, items, onRemove, onToggleLowStock }
                 {!isPantry && i.expiry && (
                   <div style={{ fontSize: 12, marginTop: 2, color: urgent ? C.rust : C.inkSoft }}>
                     {days < 0 ? "expired" : days === 0 ? "expires today" : `expires in ${days}d`}
+                  </div>
+                )}
+                {/* Fresh from the shop: say where it goes and it leaves this group. */}
+                {onMove && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 5 }}>
+                    {["Fridge", "Freezer", "Pantry", "Supplements"].map((destination) => (
+                      <button key={destination} style={styles.putAwayBtn} onClick={() => onMove(i.id, destination)}>
+                        {destination}
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>
@@ -3153,6 +3276,37 @@ const buildStyles = () => ({
     padding: "12px 12px 10px",
     borderBottom: `1px solid ${C.line}`,
     justifyContent: "center",
+  },
+  putAwayBtn: {
+    border: `1px solid ${C.line}`,
+    background: C.card,
+    color: C.inkSoft,
+    borderRadius: 999,
+    padding: "3px 9px",
+    fontFamily: "'Inter', sans-serif",
+    fontSize: 11,
+    cursor: "pointer",
+  },
+  shopMeta: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 5,
+    fontSize: 10.5,
+    color: C.inkFaint,
+    fontFamily: "'IBM Plex Mono', monospace",
+  },
+  weekTag: {
+    background: C.line,
+    color: C.inkSoft,
+    borderRadius: 4,
+    padding: "1px 5px",
+  },
+  lowTag: {
+    background: C.rust,
+    color: C.paper,
+    borderRadius: 4,
+    padding: "1px 5px",
   },
   aisleLabel: {
     fontSize: 11,

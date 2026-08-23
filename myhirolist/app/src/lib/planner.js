@@ -228,28 +228,59 @@ export function planWeek({
  * What the planned meals need that is not already in the kitchen.
  * Returns [{ name, category, forMeals: [mealName] }], deduplicated.
  */
-export function shoppingNeeds(plans, meals, batches, inventory) {
-  const committed = new Set(); // nothing committed yet - we are pricing the whole plan
-  const stocked = availableStock(inventory, committed);
-
+/**
+ * What to buy: everything the fortnight's meals need that is not in the
+ * kitchen, plus anything already flagged as running low.
+ *
+ * @param weeks [{ plan, week: "this" | "next" }]
+ * @returns [{ name, category, forMeals, weeks, reasons }]
+ */
+export function shoppingNeeds(weeks, meals, batches, inventory) {
+  const stocked = availableStock(inventory);
   const needs = new Map();
 
-  for (const plan of asArray(plans)) {
+  const add = (rawName, { category, meal, week, reason }) => {
+    const key = norm(rawName);
+    if (!key) return;
+
+    let need = needs.get(key);
+    if (!need) {
+      need = {
+        name: String(rawName).trim(),
+        category: category ?? categoryOf(rawName),
+        forMeals: [],
+        weeks: [],
+        reasons: [],
+      };
+      needs.set(key, need);
+    }
+
+    if (meal && !need.forMeals.includes(meal)) need.forMeals.push(meal);
+    if (week && !need.weeks.includes(week)) need.weeks.push(week);
+    if (reason && !need.reasons.includes(reason)) need.reasons.push(reason);
+  };
+
+  // Running low is reason enough to buy something, whether or not a meal
+  // calls for it. Staples run out between meal plans.
+  for (const item of asArray(inventory)) {
+    if (!item?.lowStock || !item.name) continue;
+    add(item.name, {
+      // Where it lives is a better hint than its name: a "Pantry" item is a
+      // pantry item even if it is called "tomato".
+      category: locationCategory(item.location) ?? categoryOf(item.name),
+      reason: "low",
+    });
+  }
+
+  // Then whatever the planned meals need and the kitchen does not have.
+  for (const entry of asArray(weeks)) {
+    const plan = entry?.plan ?? entry;
+    const week = entry?.week ?? null;
+
     for (const { meal } of resolvePlanned(plan, meals, batches)) {
       for (const ingredient of asArray(meal?.ingredients)) {
-        const key = norm(ingredient);
-        if (!key || stocked.has(key)) continue;
-
-        const existing = needs.get(key);
-        if (existing) {
-          if (!existing.forMeals.includes(meal.name)) existing.forMeals.push(meal.name);
-        } else {
-          needs.set(key, {
-            name: String(ingredient).trim(),
-            category: categoryOf(ingredient),
-            forMeals: [meal.name],
-          });
-        }
+        if (stocked.has(norm(ingredient))) continue;
+        add(ingredient, { meal: meal.name, week, reason: "meal" });
       }
     }
   }
@@ -258,6 +289,22 @@ export function shoppingNeeds(plans, meals, batches, inventory) {
     const byCategory = CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category);
     return byCategory !== 0 ? byCategory : a.name.localeCompare(b.name);
   });
+}
+
+// Kitchen locations map onto shopping aisles well enough to be worth using.
+export function locationCategory(location) {
+  switch (location) {
+    case "Pantry":
+      return "Pantry";
+    case "Fridge":
+      return "Dairy";
+    case "Freezer":
+      return "Frozen";
+    case "Supplements":
+      return "Other";
+    default:
+      return null;
+  }
 }
 
 /**
@@ -296,7 +343,14 @@ export function reconcileShopping(shopping, needs, dismissed = []) {
 
     if (needed.has(key) && !dismissedSet.has(key)) {
       const need = needed.get(key);
-      kept.push({ ...item, name: need.name, category: need.category, forMeals: need.forMeals });
+      kept.push({
+        ...item,
+        name: need.name,
+        category: need.category,
+        forMeals: need.forMeals,
+        weeks: need.weeks,
+        reasons: need.reasons,
+      });
       seen.add(key);
     }
     // else: dropped, because the plan no longer needs it
@@ -311,6 +365,8 @@ export function reconcileShopping(shopping, needs, dismissed = []) {
       source: "plan",
       category: need.category,
       forMeals: need.forMeals,
+      weeks: need.weeks,
+      reasons: need.reasons,
     });
   }
 
@@ -330,19 +386,24 @@ export function reconcileShopping(shopping, needs, dismissed = []) {
  * their own prepNotes keep them verbatim - those are specific instructions,
  * not something to merge.
  */
-export function prepTasks(plans, meals, batches) {
-  const bespoke = [];
-  const byIngredient = new Map();
+export function prepTasks(thisWeekPlan, nextWeekPlan, meals, batches) {
+  const tasks = [];
+  const seen = new Set();
 
-  const seenMeals = new Set();
+  const collect = (plan, week) => {
+    const bespoke = [];
+    const byIngredient = new Map();
 
-  for (const plan of asArray(plans)) {
     for (const { meal } of resolvePlanned(plan, meals, batches)) {
-      if (!meal || seenMeals.has(meal.id)) continue;
-      seenMeals.add(meal.id);
+      if (!meal || seen.has(meal.id)) continue;
+
+      // Next week is only worth touching this weekend if it actually keeps.
+      // Chopping salad a week early helps nobody.
+      if (week === "next" && !freezesWell(meal)) continue;
+      seen.add(meal.id);
 
       if (meal.prepNotes) {
-        bespoke.push({ label: meal.prepNotes, meal: meal.name, kind: "meal" });
+        bespoke.push({ label: meal.prepNotes, meal: meal.name, kind: "meal", week });
         continue;
       }
 
@@ -360,19 +421,82 @@ export function prepTasks(plans, meals, batches) {
         }
       }
     }
+
+    const grouped = [...byIngredient.values()]
+      .sort((a, b) => {
+        const byAction = a.action === b.action ? 0 : a.action === "Marinate & portion" ? -1 : 1;
+        return byAction !== 0 ? byAction : a.ingredient.localeCompare(b.ingredient);
+      })
+      .map((task) => ({
+        label: `${task.action} ${task.ingredient} — for ${task.meals.join(", ")}`,
+        meal: task.meals.join(", "),
+        kind: "ingredient",
+        week,
+      }));
+
+    tasks.push(...grouped, ...bespoke);
+  };
+
+  collect(thisWeekPlan, "this");
+  collect(nextWeekPlan, "next");
+
+  // Next week's jobs are cook-ahead ones, so say so on the task itself.
+  return tasks.map((task) =>
+    task.week === "next" ? { ...task, label: `${task.label} (cook ahead & freeze for next week)` } : task
+  );
+}
+
+// Whether a meal is worth preparing a week early. The household's own prep
+// notes are the best signal available - most of the freezable ones say so.
+export function freezesWell(meal) {
+  const notes = norm(meal?.prepNotes);
+  return notes.includes("freez") || notes.includes("frozen");
+}
+
+const WEEKDAY_INDEX = { Monday: 0, Tuesday: 1, Wednesday: 2, Thursday: 3, Friday: 4 };
+
+/**
+ * Clears the days the planner chose itself, so they can be filled again.
+ *
+ * Days the household picked by hand are pinned and survive. Days already
+ * past are left alone too - re-shuffling Monday's dinner on Thursday helps
+ * nobody, and it may already have been cooked.
+ *
+ * @param auto  { Monday: true, ... } - which days the planner filled
+ * @param fromWeekday  only clear this weekday onward (null = all)
+ */
+export function clearAutoDays(plan, auto, fromWeekday = null) {
+  const cleared = { ...(plan ?? {}) };
+  const floor = fromWeekday === null ? -1 : WEEKDAY_INDEX[fromWeekday] ?? -1;
+
+  for (const weekday of WEEKDAYS) {
+    if (!auto?.[weekday]) continue;
+    if (WEEKDAY_INDEX[weekday] < floor) continue;
+    cleared[weekday] = null;
+  }
+  return cleared;
+}
+
+/**
+ * Replans after a manual override: keeps pinned days, throws the rest of the
+ * planner's own choices away, and fills again.
+ *
+ * Returns { plan, auto } so the caller knows which days remain the app's.
+ */
+export function replan({ plan, auto, fromWeekday, ...context }) {
+  const kept = clearAutoDays(plan, auto, fromWeekday);
+  const filled = planWeek({ ...context, existingPlan: kept });
+
+  const nextAuto = {};
+  for (const weekday of WEEKDAYS) {
+    // A day is the app's if the app just filled it and the household had not
+    // pinned it.
+    nextAuto[weekday] = Boolean(filled[weekday]) && !kept[weekday] ? true : Boolean(auto?.[weekday]) && !kept[weekday];
+  }
+  // Pinned days are never the app's.
+  for (const weekday of WEEKDAYS) {
+    if (plan?.[weekday] && !auto?.[weekday]) nextAuto[weekday] = false;
   }
 
-  const grouped = [...byIngredient.values()]
-    .sort((a, b) => {
-      // Protein first - it takes longest and often needs to marinate.
-      const byAction = a.action === b.action ? 0 : a.action === "Marinate & portion" ? -1 : 1;
-      return byAction !== 0 ? byAction : a.ingredient.localeCompare(b.ingredient);
-    })
-    .map((task) => ({
-      label: `${task.action} ${task.ingredient} — for ${task.meals.join(", ")}`,
-      meal: task.meals.join(", "),
-      kind: "ingredient",
-    }));
-
-  return [...grouped, ...bespoke];
+  return { plan: filled, auto: nextAuto };
 }

@@ -24,6 +24,7 @@ export const LIGHT = {
   sage: "#6E7F54", // positive, links, mono accents
   rust: "#B5502F", // warnings, overdue, errors
   rustWash: "#FBEAE6", // warning background
+  autoTint: "#F2F4EC", // rows the app added itself, e.g. planned shopping
 };
 
 export const DARK = {
@@ -43,6 +44,7 @@ export const DARK = {
   sage: "#9AAE7E",
   rust: "#D9775A",
   rustWash: "#3A2A25",
+  autoTint: "#242B26",
 };
 
 // Live-bound to the current palette. Styles read C.paper etc. and, because
