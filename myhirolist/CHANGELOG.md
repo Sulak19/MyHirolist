@@ -1,3 +1,22 @@
+## 1.0.9
+
+feat: two-week meal plan, projected a fortnight onto the calendar
+
+The Plan tab gains a This week / Next week toggle. weekPlan keeps its
+shape - every existing read still works - and nextWeekPlan sits beside
+it with the same shape. On Monday the app rolls next week into this week
+and empties next week; planWeekOf stamps which Monday weekPlan belongs
+to, so the rollover is idempotent across phones and skipped cleanly on
+legacy data. If more than one week passed, both reset, since the old
+'next week' is stale too. 9 tests, passing in UTC and Sydney.
+
+The calendar now projects both weeks, so dinners cover a fortnight.
+Cleaning and expiry already reached 120 days out. dinner_tomorrow reads
+next week's plan when tomorrow is Monday.
+
+Verified in a browser: the toggle renders; accepting a meal on Next week
+writes nextWeekPlan only.
+
 ## 1.0.8
 
 fix: Home tab reads only the Home Base calendar; correct ingress path
