@@ -74,3 +74,36 @@ test("garbage in does not throw", () => {
     assert.equal(rolloverWeeks(bad, WED_24_AUG), bad);
   }
 });
+
+test("the outgoing week is archived into meal history with real dates", () => {
+  const data = {
+    weekPlan: { ...EMPTY_WEEK, Monday: "karaage", Wednesday: "adobo" },
+    nextWeekPlan: EMPTY_WEEK,
+    planWeekOf: LAST_MONDAY,
+  };
+  const out = rolloverWeeks(data, WED_24_AUG);
+
+  assert.deepEqual(out.mealHistory, [
+    { date: "2026-08-17", mealId: "karaage" },
+    { date: "2026-08-19", mealId: "adobo" },
+  ]);
+});
+
+test("batch portions are not archived as meals cooked", () => {
+  const data = {
+    weekPlan: { ...EMPTY_WEEK, Monday: "batch:b1", Tuesday: "karaage" },
+    planWeekOf: LAST_MONDAY,
+  };
+  const out = rolloverWeeks(data, WED_24_AUG);
+  assert.deepEqual(out.mealHistory.map((h) => h.mealId), ["karaage"]);
+});
+
+test("existing history is kept, not replaced", () => {
+  const data = {
+    weekPlan: { ...EMPTY_WEEK, Monday: "adobo" },
+    planWeekOf: LAST_MONDAY,
+    mealHistory: [{ date: "2026-07-01", mealId: "hamburg" }],
+  };
+  const out = rolloverWeeks(data, WED_24_AUG);
+  assert.deepEqual(out.mealHistory.map((h) => h.mealId), ["hamburg", "adobo"]);
+});

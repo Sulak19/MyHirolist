@@ -8,6 +8,30 @@
 
 export const EMPTY_WEEK = { Monday: null, Tuesday: null, Wednesday: null, Thursday: null, Friday: null };
 
+const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+
+// Roughly six months. Long enough for the planner to know a meal is stale,
+// short enough that the blob does not grow without limit.
+const HISTORY_LIMIT = 180;
+
+export function addDays(dateKey, days) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return localDateKey(new Date(year, month - 1, day + days));
+}
+
+// What was actually eaten, so the planner can offer variety rather than the
+// same four dinners forever. Batch portions are skipped - they are leftovers
+// of a meal already recorded when it was cooked.
+function archiveWeek(plan, mondayKey) {
+  const entries = [];
+  WEEKDAYS.forEach((weekday, index) => {
+    const value = plan?.[weekday];
+    if (!value || String(value).startsWith("batch:")) return;
+    entries.push({ date: addDays(mondayKey, index), mealId: value });
+  });
+  return entries;
+}
+
 function localDateKey(date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
@@ -57,10 +81,13 @@ export function rolloverWeeks(data, now = new Date()) {
 
   const exactlyOneWeek = nextMondayAfterStamp === thisMonday;
 
+  const history = [...(Array.isArray(data.mealHistory) ? data.mealHistory : []), ...archiveWeek(data.weekPlan, stamped)];
+
   return {
     ...data,
     weekPlan: exactlyOneWeek ? { ...EMPTY_WEEK, ...(data.nextWeekPlan ?? {}) } : { ...EMPTY_WEEK },
     nextWeekPlan: { ...EMPTY_WEEK },
     planWeekOf: thisMonday,
+    mealHistory: history.slice(-HISTORY_LIMIT),
   };
 }

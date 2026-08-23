@@ -25,6 +25,7 @@ import { loadHouseholdData, saveHouseholdData, subscribeToHouseholdData, scanIma
 import { useScanAvailable } from "./lib/useCapabilities.js";
 import { mergeWithDefaults } from "./lib/merge.js";
 import { rolloverWeeks, EMPTY_WEEK } from "./lib/weeks.js";
+import { planWeek, shoppingNeeds, reconcileShopping, prepTasks, CATEGORY_ORDER } from "./lib/planner.js";
 import { getToday } from "./lib/api.js";
 import { C, useTheme } from "./lib/theme.js";
 
@@ -121,6 +122,8 @@ const DEFAULT_DATA = {
   weekPlan: { Monday: null, Tuesday: null, Wednesday: null, Thursday: null, Friday: null },
   nextWeekPlan: { Monday: null, Tuesday: null, Wednesday: null, Thursday: null, Friday: null },
   planWeekOf: null, // Monday of the week weekPlan belongs to; set on first load
+  mealHistory: [], // what was actually eaten, so the planner can vary things
+  dismissedShopping: [], // plan ingredients you removed; not re-added behind your back
   cleaning: [
     { id: uid(), name: "Bed sheets", freq: "Weekly", lastDone: null },
     { id: uid(), name: "Toilet", freq: "Weekly", lastDone: null },
@@ -217,6 +220,37 @@ async function loadState(setData, setLoaded) {
 // Typing in a text field updates `data` on every keystroke, so saving straight
 // away meant one write -- and one live-sync broadcast to the other phone --
 // per character. Waiting for a pause collapses a burst of typing into one save.
+
+/* Keeps the shopping list in step with the fortnight's meals.
+
+   The app owns items marked source: "plan" and will add, update and remove
+   them as the plan changes. Anything the household typed in itself has no
+   source and is never touched. Removing a plan item is remembered, so it does
+   not silently reappear on the next pass. */
+function usePlanShopping(data, setData, ready) {
+  const signature = JSON.stringify([data?.weekPlan, data?.nextWeekPlan, data?.inventory?.map((i) => [i.name, i.lowStock])]);
+
+  useEffect(() => {
+    if (!ready || !data) return;
+
+    const needs = shoppingNeeds([data.weekPlan, data.nextWeekPlan], data.mealPrep, data.batchCooking, data.inventory);
+    const { items, dismissed } = reconcileShopping(data.shopping, needs, data.dismissedShopping);
+
+    // Only write when something actually changed, or this loops forever
+    // against its own save.
+    const before = (data.shopping ?? []).map((i) => `${i.name}:${i.checked}:${i.source ?? ""}`).sort().join("|");
+    const after = items.map((i) => `${i.name}:${i.checked}:${i.source ?? ""}`).sort().join("|");
+    const dismissedChanged = JSON.stringify(dismissed) !== JSON.stringify(data.dismissedShopping ?? []);
+    if (before === after && !dismissedChanged) return;
+
+    setData((current) => ({
+      ...current,
+      shopping: items.map((item) => (item.id ? item : { ...item, id: uid() })),
+      dismissedShopping: dismissed,
+    }));
+  }, [signature, ready]);
+}
+
 const SAVE_DEBOUNCE_MS = 800;
 
 function useAutoSave(data, ready, setSaveStatus, setSaveError, isRemoteUpdateRef) {
@@ -326,6 +360,7 @@ export default function HomeBase() {
     loadState(setData, setReady);
   }, []);
   useAutoSave(data, ready, setSaveStatus, setSaveError, isRemoteUpdateRef);
+  usePlanShopping(data, setData, ready);
 
   // Live sync: when your partner's phone saves a change, it shows up here
   // automatically — no refresh needed.
@@ -414,6 +449,8 @@ export default function HomeBase() {
             onPlanChange={(v) => update(planWeek === "next" ? "nextWeekPlan" : "weekPlan", v)}
             planWeek={planWeek}
             onPlanWeekChange={setPlanWeek}
+            otherWeekPlan={planWeek === "next" ? data.weekPlan : data.nextWeekPlan ?? EMPTY_WEEK}
+            mealHistory={data.mealHistory}
             shoppingList={data.shopping}
             onShoppingChange={(v) => update("shopping", v)}
             prepList={data.weekendPrep}
@@ -442,6 +479,12 @@ export default function HomeBase() {
           <ShoppingTab
             list={data.shopping}
             onChange={(v) => update("shopping", v)}
+            onDismiss={(name) =>
+              setData((current) => ({
+                ...current,
+                dismissedShopping: [...new Set([...(current.dismissedShopping ?? []), name.trim().toLowerCase()])],
+              }))
+            }
             inventory={data.inventory}
             onInventoryChange={(v) => update("inventory", v)}
           />
@@ -832,7 +875,19 @@ function TapSelect({ value, options, onChange, placeholder, disabled }) {
   );
 }
 
-function PlanTab({ meals, plan, onPlanChange, planWeek, onPlanWeekChange, shoppingList, onShoppingChange, prepList, onPrepChange, selectedMealIds, batchList, onBatchChange, inventory }) {
+function PlanTab({ meals, plan, onPlanChange, planWeek: activeWeek, onPlanWeekChange, otherWeekPlan, mealHistory, shoppingList, onShoppingChange, prepList, onPrepChange, selectedMealIds, batchList, onBatchChange, inventory }) {
+  const fillWeek = () =>
+    onPlanChange(
+      planWeek({
+        meals,
+        batches: batchList,
+        inventory,
+        mealHistory,
+        otherWeekPlan,
+        existingPlan: plan,
+      })
+    );
+
   const selectedMeals = selectedMealIds.map((id) => meals.find((m) => m.id === id)).filter(Boolean);
   const [suggestions, setSuggestions] = useState({}); // day -> { type: 'batch'|'meal', batchId?, mealId?, label, tag? }
 
@@ -925,9 +980,16 @@ function PlanTab({ meals, plan, onPlanChange, planWeek, onPlanWeekChange, shoppi
     }
   };
 
+  // Shopping keeps itself in step with the plan now, so this button is just
+  // about prep - and prep is grouped by the job, since three meals wanting
+  // onions is one chopping session, not three.
   const addPlannedToLists = () => {
-    addMealsToShoppingList(plannedMeals, shoppingList, onShoppingChange, inventory);
-    addMealsToPrepList(plannedMeals, prepList, onPrepChange);
+    const grouped = prepTasks([plan, otherWeekPlan], meals, batchList);
+    const existing = new Set(prepList.map((t) => t.label));
+    const fresh = grouped
+      .filter((task) => !existing.has(task.label))
+      .map((task) => ({ id: uid(), meal: task.meal, label: task.label, checked: false }));
+    if (fresh.length) onPrepChange([...prepList, ...fresh]);
   };
 
   return (
@@ -944,8 +1006,8 @@ function PlanTab({ meals, plan, onPlanChange, planWeek, onPlanWeekChange, shoppi
               onClick={() => onPlanWeekChange(key)}
               style={{
                 ...styles.weekToggleBtn,
-                background: planWeek === key ? C.teal : "transparent",
-                color: planWeek === key ? C.onTeal : C.inkSoft,
+                background: activeWeek === key ? C.teal : "transparent",
+                color: activeWeek === key ? C.onTeal : C.inkSoft,
               }}
             >
               {label}
@@ -953,6 +1015,10 @@ function PlanTab({ meals, plan, onPlanChange, planWeek, onPlanWeekChange, shoppi
           ))}
         </div>
       </div>
+
+      <button style={styles.fillWeekBtn} onClick={fillWeek}>
+        <Shuffle size={14} /> Plan the empty days
+      </button>
       <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 12 }}>
         Empty days auto-suggest from batch portions first, then what's in stock — pick your own from the shortlist anytime.
       </div>
@@ -1022,7 +1088,7 @@ function PlanTab({ meals, plan, onPlanChange, planWeek, onPlanWeekChange, shoppi
 
       {plannedMeals.length > 0 && (
         <button style={{ ...styles.addSpendBtn, marginTop: 14 }} onClick={addPlannedToLists}>
-          <ShoppingCart size={14} /> Add this week's meals to shopping & prep lists
+          <ShoppingCart size={14} /> Add prep tasks for the fortnight
         </button>
       )}
     </div>
@@ -1579,7 +1645,7 @@ function PrepTab({ list, onChange }) {
 }
 
 /* ---------------- SHOPPING ---------------- */
-function ShoppingTab({ list, onChange, inventory, onInventoryChange }) {
+function ShoppingTab({ list, onChange, inventory, onInventoryChange, onDismiss }) {
   const [name, setName] = useState("");
   const [promptIds, setPromptIds] = useState(new Set());
 
@@ -1600,6 +1666,10 @@ function ShoppingTab({ list, onChange, inventory, onInventoryChange }) {
     });
   };
   const remove = (id) => {
+    const item = list.find((i) => i.id === id);
+    // Say no once and it stays no. Without this the plan re-adds it on the
+    // next pass and the item appears to be un-deletable.
+    if (item?.source === "plan" && onDismiss) onDismiss(item.name);
     onChange(list.filter((i) => i.id !== id));
     setPromptIds((prev) => {
       const next = new Set(prev);
@@ -1608,6 +1678,9 @@ function ShoppingTab({ list, onChange, inventory, onInventoryChange }) {
     });
   };
   const clearChecked = () => onChange(list.filter((i) => !i.checked));
+
+  // Anything without a category is something typed in by hand; it goes last
+  // under "Other" rather than being hidden.
 
   const addToInventory = (item, location) => {
     onInventoryChange([...inventory, { id: uid(), name: item.name, location, expiry: null, lowStock: false }]);
@@ -1627,6 +1700,18 @@ function ShoppingTab({ list, onChange, inventory, onInventoryChange }) {
   const unchecked = list.filter((i) => !i.checked);
   const checked = list.filter((i) => i.checked);
 
+  const groupedUnchecked = (() => {
+    const groups = new Map();
+    for (const item of unchecked) {
+      const category = item.category ?? "Other";
+      if (!groups.has(category)) groups.set(category, []);
+      groups.get(category).push(item);
+    }
+    return [...groups.entries()].sort(
+      (a, b) => CATEGORY_ORDER.indexOf(a[0]) - CATEGORY_ORDER.indexOf(b[0])
+    );
+  })();
+
   return (
     <div>
       <SectionTitle>Shopping list</SectionTitle>
@@ -1641,20 +1726,31 @@ function ShoppingTab({ list, onChange, inventory, onInventoryChange }) {
         <IconBtn onClick={add} />
       </AddRow>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
-        {unchecked.map((i) => (
-          <ShoppingRow
-            key={i.id}
-            item={i}
-            onToggle={toggle}
-            onRemove={remove}
-            showPrompt={promptIds.has(i.id)}
-            onAddToInventory={addToInventory}
-            onDismissPrompt={dismissPrompt}
-          />
-        ))}
-        {list.length === 0 && <Empty text="List's empty — add what you need to pick up." />}
-      </div>
+      {/* Grouped by aisle so the list can be walked in shop order rather than
+          in the order things happened to be added. */}
+      {groupedUnchecked.map(([category, items]) => (
+        <div key={category} style={{ marginTop: 14 }}>
+          <div style={styles.aisleLabel}>{category}</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 6 }}>
+            {items.map((i) => (
+              <ShoppingRow
+                key={i.id}
+                item={i}
+                onToggle={toggle}
+                onRemove={remove}
+                showPrompt={promptIds.has(i.id)}
+                onAddToInventory={addToInventory}
+                onDismissPrompt={dismissPrompt}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+      {list.length === 0 && (
+        <div style={{ marginTop: 12 }}>
+          <Empty text="List's empty — plan some meals, or add what you need to pick up." />
+        </div>
+      )}
 
       {checked.length > 0 && (
         <div style={{ marginTop: 18 }}>
@@ -3057,6 +3153,28 @@ const buildStyles = () => ({
     padding: "12px 12px 10px",
     borderBottom: `1px solid ${C.line}`,
     justifyContent: "center",
+  },
+  aisleLabel: {
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color: C.sage,
+  },
+  fillWeekBtn: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    background: C.mustard,
+    border: "none",
+    borderRadius: 8,
+    padding: "8px 13px",
+    marginBottom: 12,
+    fontFamily: "'Inter', sans-serif",
+    fontSize: 13,
+    fontWeight: 600,
+    color: C.ink,
+    cursor: "pointer",
   },
   weekToggle: {
     display: "inline-flex",
