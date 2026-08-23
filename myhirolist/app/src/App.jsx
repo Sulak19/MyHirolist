@@ -24,6 +24,7 @@ import {
 import { loadHouseholdData, saveHouseholdData, subscribeToHouseholdData, scanImageWithClaude, listSnapshots, restoreSnapshot } from "./lib/api.js";
 import { useScanAvailable } from "./lib/useCapabilities.js";
 import { mergeWithDefaults } from "./lib/merge.js";
+import { rolloverWeeks, EMPTY_WEEK } from "./lib/weeks.js";
 import { getToday } from "./lib/api.js";
 import { C, useTheme } from "./lib/theme.js";
 
@@ -118,6 +119,8 @@ const DEFAULT_DATA = {
   weekendPrep: [],
   mealSelection: [],
   weekPlan: { Monday: null, Tuesday: null, Wednesday: null, Thursday: null, Friday: null },
+  nextWeekPlan: { Monday: null, Tuesday: null, Wednesday: null, Thursday: null, Friday: null },
+  planWeekOf: null, // Monday of the week weekPlan belongs to; set on first load
   cleaning: [
     { id: uid(), name: "Bed sheets", freq: "Weekly", lastDone: null },
     { id: uid(), name: "Toilet", freq: "Weekly", lastDone: null },
@@ -202,7 +205,7 @@ const DEFAULT_DATA = {
 async function loadState(setData, setLoaded) {
   try {
     const remote = await loadHouseholdData();
-    setData(mergeWithDefaults(DEFAULT_DATA, remote));
+    setData(rolloverWeeks(mergeWithDefaults(DEFAULT_DATA, remote)));
   } catch (e) {
     console.error("load failed", e);
     setData(DEFAULT_DATA);
@@ -314,6 +317,7 @@ export default function HomeBase() {
   const [data, setData] = useState(null);
   const [ready, setReady] = useState(false);
   const [tab, setTab] = useState("home");
+  const [planWeek, setPlanWeek] = useState("this"); // "this" | "next"
   const [saveStatus, setSaveStatus] = useState("idle");
   const [saveError, setSaveError] = useState("");
   const isRemoteUpdateRef = useRef(false);
@@ -328,7 +332,7 @@ export default function HomeBase() {
   useEffect(() => {
     const unsubscribe = subscribeToHouseholdData((remoteData) => {
       isRemoteUpdateRef.current = true;
-      setData(mergeWithDefaults(DEFAULT_DATA, remoteData));
+      setData(rolloverWeeks(mergeWithDefaults(DEFAULT_DATA, remoteData)));
     });
     return unsubscribe;
   }, []);
@@ -406,8 +410,10 @@ export default function HomeBase() {
         {tab === "plan" && (
           <PlanTab
             meals={data.mealPrep}
-            plan={data.weekPlan}
-            onPlanChange={(v) => update("weekPlan", v)}
+            plan={planWeek === "next" ? data.nextWeekPlan ?? EMPTY_WEEK : data.weekPlan}
+            onPlanChange={(v) => update(planWeek === "next" ? "nextWeekPlan" : "weekPlan", v)}
+            planWeek={planWeek}
+            onPlanWeekChange={setPlanWeek}
             shoppingList={data.shopping}
             onShoppingChange={(v) => update("shopping", v)}
             prepList={data.weekendPrep}
@@ -764,7 +770,7 @@ function TapSelect({ value, options, onChange, placeholder, disabled }) {
   );
 }
 
-function PlanTab({ meals, plan, onPlanChange, shoppingList, onShoppingChange, prepList, onPrepChange, selectedMealIds, batchList, onBatchChange, inventory }) {
+function PlanTab({ meals, plan, onPlanChange, planWeek, onPlanWeekChange, shoppingList, onShoppingChange, prepList, onPrepChange, selectedMealIds, batchList, onBatchChange, inventory }) {
   const selectedMeals = selectedMealIds.map((id) => meals.find((m) => m.id === id)).filter(Boolean);
   const [suggestions, setSuggestions] = useState({}); // day -> { type: 'batch'|'meal', batchId?, mealId?, label, tag? }
 
@@ -864,7 +870,27 @@ function PlanTab({ meals, plan, onPlanChange, shoppingList, onShoppingChange, pr
 
   return (
     <div>
-      <SectionTitle>Weekday meal plan</SectionTitle>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+        <SectionTitle>Weekday meal plan</SectionTitle>
+        <div style={styles.weekToggle}>
+          {[
+            ["this", "This week"],
+            ["next", "Next week"],
+          ].map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => onPlanWeekChange(key)}
+              style={{
+                ...styles.weekToggleBtn,
+                background: planWeek === key ? C.teal : "transparent",
+                color: planWeek === key ? C.onTeal : C.inkSoft,
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
       <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 12 }}>
         Empty days auto-suggest from batch portions first, then what's in stock — pick your own from the shortlist anytime.
       </div>
@@ -2969,6 +2995,23 @@ const buildStyles = () => ({
     padding: "12px 12px 10px",
     borderBottom: `1px solid ${C.line}`,
     justifyContent: "center",
+  },
+  weekToggle: {
+    display: "inline-flex",
+    border: `1px solid ${C.line}`,
+    borderRadius: 999,
+    padding: 2,
+    marginBottom: 12,
+    background: C.card,
+  },
+  weekToggleBtn: {
+    border: "none",
+    borderRadius: 999,
+    padding: "5px 11px",
+    fontFamily: "'Inter', sans-serif",
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: "pointer",
   },
   subStrip: {
     display: "flex",

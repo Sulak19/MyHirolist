@@ -18,12 +18,24 @@ export function isDue(task, nowMs) {
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 // The plan is keyed by weekday name and only covers Monday to Friday.
+function mondayKey(date) {
+  const copy = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const weekday = copy.getDay();
+  copy.setDate(copy.getDate() + (weekday === 0 ? -6 : 1 - weekday));
+  return copy.getTime();
+}
+
 export function dinnerFor(data, dayOffset, nowMs) {
+  const today = new Date(nowMs);
   const date = new Date(nowMs);
   date.setDate(date.getDate() + dayOffset);
   const weekday = WEEKDAYS[date.getDay()];
 
-  const plan = data?.weekPlan && typeof data.weekPlan === "object" ? data.weekPlan : {};
+  // Tomorrow can fall in next week (on a Sunday), so pick the plan whose
+  // Monday matches the target date's week.
+  const sameWeek = mondayKey(date) === mondayKey(today);
+  const source = sameWeek ? data?.weekPlan : data?.nextWeekPlan;
+  const plan = source && typeof source === "object" ? source : {};
   const value = plan[weekday];
   if (!value) return null;
 

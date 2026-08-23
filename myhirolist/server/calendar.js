@@ -90,14 +90,21 @@ export function planEvents(data, nowMs) {
   const events = [];
   const monday = mondayOf(nowMs);
 
-  // Dinners. weekPlan is keyed by weekday name, so it lands on this week.
-  const plan = data.weekPlan && typeof data.weekPlan === "object" ? data.weekPlan : {};
-  WEEKDAYS.forEach((weekday, index) => {
-    const name = mealNameFor(data, plan[weekday]);
-    if (!name) return;
-    const date = addDays(monday, index);
-    events.push({ key: `meal:${date}`, summary: `Dinner: ${name}`, date });
-  });
+  // Dinners: this week and next. Each plan is keyed by weekday name; the
+  // app rolls nextWeekPlan into weekPlan on Monday, so the two never overlap.
+  const weeks = [
+    [data.weekPlan, monday],
+    [data.nextWeekPlan, addDays(monday, 7)],
+  ];
+  for (const [plan, weekStart] of weeks) {
+    if (!plan || typeof plan !== "object") continue;
+    WEEKDAYS.forEach((weekday, index) => {
+      const name = mealNameFor(data, plan[weekday]);
+      if (!name) return;
+      const date = addDays(weekStart, index);
+      events.push({ key: `meal:${date}`, summary: `Dinner: ${name}`, date });
+    });
+  }
 
   // Cleaning, on the day each task is next due.
   for (const task of asArray(data.cleaning)) {

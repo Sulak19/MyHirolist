@@ -192,3 +192,16 @@ test("events on the calendar that are not ours are never touched", () => {
   const { toDelete } = reconcileEvents([], []);
   assert.equal(toDelete.length, 0);
 });
+
+test("next week's dinners land on next week's dates", () => {
+  const data = {
+    mealPrep: [{ id: "m1", name: "Karaage" }, { id: "m2", name: "Adobo" }],
+    weekPlan: { Monday: "m1" },
+    nextWeekPlan: { Monday: "m2" },
+  };
+  const meals = planEvents(data, NOW).filter((e) => e.key.startsWith("meal:"));
+  assert.deepEqual(meals, [
+    { key: "meal:2026-08-24", summary: "Dinner: Karaage", date: "2026-08-24" },
+    { key: "meal:2026-08-31", summary: "Dinner: Adobo", date: "2026-08-31" },
+  ]);
+});

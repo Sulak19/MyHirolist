@@ -166,3 +166,13 @@ test("dinner sensors say 'Nothing planned' rather than publishing an empty state
   const sensors = sensorsFrom(computeSummary({}, WED));
   assert.equal(sensors.find((s) => s.objectId === "dinner_tonight").state, "Nothing planned");
 });
+
+test("on a Sunday, tomorrow's dinner comes from next week's plan", () => {
+  const SUN = new Date(2026, 7, 30, 12, 0, 0).getTime();
+  const data = {
+    mealPrep: [{ id: "m1", name: "Karaage" }, { id: "m2", name: "Adobo" }],
+    weekPlan: { Monday: "m1" },
+    nextWeekPlan: { Monday: "m2" },
+  };
+  assert.equal(dinnerFor(data, 1, SUN), "Adobo");
+});
