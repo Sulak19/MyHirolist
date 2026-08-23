@@ -69,10 +69,10 @@ jobs:
       - name: Build and push for every architecture
         uses: home-assistant/builder@2024.03.5
         with:
-          args: |
-            --target myhirolist
-            --all
-            --addon
+          # Must stay on ONE line. The action appends this straight after a
+          # shell line-continuation, so a multi-line block truncates the
+          # docker command and the rest is run as separate shell commands.
+          args: --target myhirolist --all --addon
 
       - name: Record the version in the repository
         run: |
