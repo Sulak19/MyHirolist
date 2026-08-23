@@ -21,7 +21,8 @@ import {
   BookOpen,
   Boxes,
 } from "lucide-react";
-import { loadHouseholdData, saveHouseholdData, subscribeToHouseholdData, scanImageWithClaude } from "./lib/api.js";
+import { loadHouseholdData, saveHouseholdData, subscribeToHouseholdData, scanImageWithClaude, listSnapshots, restoreSnapshot } from "./lib/api.js";
+import { useScanAvailable } from "./lib/useCapabilities.js";
 
 /* ---------------------------------------------------------
    Home Base — a household dashboard
@@ -296,6 +297,7 @@ export default function HomeBase() {
         {saveStatus === "error" && `⚠ Save failed: ${saveError}`}
         {saveStatus === "idle" && "\u00A0"}
       </div>
+      <RestorePanel />
 
       <nav style={styles.tabStrip}>
         {TABS.map((t) => {
@@ -853,8 +855,9 @@ async function fileToJpegBase64(file, maxDim = 1600) {
 
 /* Sends a base64 JPEG + prompt to Claude, returns parsed JSON from the response. */
 async function askClaudeAboutImage(base64Jpeg, promptText) {
-  // Routed through a Supabase Edge Function so the Anthropic API key stays
-  // server-side and is never exposed in the browser.
+  // Routed through Home Assistant's AI Task, so whichever model the house
+  // is configured to use -- local or cloud -- does the reading, and no API
+  // key is ever held by this app.
   return scanImageWithClaude(base64Jpeg, promptText);
 }
 
@@ -1805,6 +1808,7 @@ function DogTab({ dogFood, onChange, dogShoppingList, onDogShoppingChange }) {
   const clearCheckedDogList = () => onDogShoppingChange(dogShoppingList.filter((i) => !i.checked));
 
   const fileInputRef = useRef(null);
+  const scanAvailable = useScanAvailable();
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState("");
   const [scanResults, setScanResults] = useState(null); // array of { id, name, checked }
@@ -1934,9 +1938,15 @@ function DogTab({ dogFood, onChange, dogShoppingList, onDogShoppingChange }) {
           <div style={{ fontSize: 12.5, color: "#6b6a5e", marginTop: 4 }}>
             Snap the treat drawer or freezer stash — the photo isn't saved, only the list it finds.
           </div>
-          <button style={{ ...styles.addSpendBtn, marginTop: 10 }} onClick={triggerScan} disabled={scanning}>
-            <Camera size={14} /> {scanning ? "Reading photo…" : "Scan dog food/treats"}
-          </button>
+          {scanAvailable ? (
+            <button style={{ ...styles.addSpendBtn, marginTop: 10 }} onClick={triggerScan} disabled={scanning}>
+              <Camera size={14} /> {scanning ? "Reading photo…" : "Scan dog food/treats"}
+            </button>
+          ) : (
+            <div style={styles.scanUnavailable}>
+              Photo scanning needs an AI Task set up in Home Assistant — Settings → Devices &amp; Services → Add Integration.
+            </div>
+          )}
           {scanError && <div style={{ fontSize: 12.5, color: "#B5502F", marginTop: 8 }}>{scanError}</div>}
 
           {scanResults && (
@@ -2112,6 +2122,7 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
   const [expiry, setExpiry] = useState("");
   const [lowStock, setLowStock] = useState(false);
   const fileInputRef = useRef(null);
+  const scanAvailable = useScanAvailable();
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState("");
   const [scanResults, setScanResults] = useState(null); // array of { id, name, checked, location }
@@ -2219,9 +2230,15 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
         <div style={{ fontSize: 12.5, color: "#6b6a5e", marginTop: 4 }}>
           Snap a receipt or a shelf of items — the photo isn't saved, only the list it finds.
         </div>
-        <button style={{ ...styles.addSpendBtn, marginTop: 10 }} onClick={triggerScan} disabled={scanning}>
-          <Camera size={14} /> {scanning ? "Reading photo…" : "Scan receipt or items"}
-        </button>
+        {scanAvailable ? (
+          <button style={{ ...styles.addSpendBtn, marginTop: 10 }} onClick={triggerScan} disabled={scanning}>
+            <Camera size={14} /> {scanning ? "Reading photo…" : "Scan receipt or items"}
+          </button>
+        ) : (
+          <div style={styles.scanUnavailable}>
+            Photo scanning needs an AI Task set up in Home Assistant — Settings → Devices &amp; Services → Add Integration.
+          </div>
+        )}
         {scanError && <div style={{ fontSize: 12.5, color: "#B5502F", marginTop: 8 }}>{scanError}</div>}
 
         {scanResults && (
@@ -2476,6 +2493,7 @@ function RecipesTab({ list, onChange }) {
   const [openId, setOpenId] = useState(null);
   const [query, setQuery] = useState("");
   const fileInputRef = useRef(null);
+  const scanAvailable = useScanAvailable();
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState("");
   const [draft, setDraft] = useState(null); // { name, tag, ingredients: string, instructions, url }
@@ -2559,9 +2577,15 @@ function RecipesTab({ list, onChange }) {
         <div style={{ fontSize: 12.5, color: "#6b6a5e", marginTop: 4 }}>
           A screenshot, cookbook page, or handwritten card — it'll pull out the title, ingredients, and steps for you to check over.
         </div>
-        <button style={{ ...styles.addSpendBtn, marginTop: 10 }} onClick={triggerScan} disabled={scanning}>
-          <Camera size={14} /> {scanning ? "Reading photo…" : "Scan a recipe"}
-        </button>
+        {scanAvailable ? (
+          <button style={{ ...styles.addSpendBtn, marginTop: 10 }} onClick={triggerScan} disabled={scanning}>
+            <Camera size={14} /> {scanning ? "Reading photo…" : "Scan a recipe"}
+          </button>
+        ) : (
+          <div style={styles.scanUnavailable}>
+            Photo scanning needs an AI Task set up in Home Assistant — Settings → Devices &amp; Services → Add Integration.
+          </div>
+        )}
         {scanError && <div style={{ fontSize: 12.5, color: "#B5502F", marginTop: 8 }}>{scanError}</div>}
 
         {draft && (
@@ -2667,6 +2691,82 @@ function RecipesTab({ list, onChange }) {
 }
 
 /* ---------------- shared bits ---------------- */
+/* Restore points kept by the add-on: hourly for two days, then daily for a
+   fortnight. Separate from Home Assistant's own backups, so putting back a
+   wiped meal plan does not mean restoring the whole system. */
+function RestorePanel() {
+  const [open, setOpen] = useState(false);
+  const [snapshots, setSnapshots] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const openPanel = async () => {
+    setOpen(true);
+    setError("");
+    setSnapshots(null);
+    try {
+      setSnapshots(await listSnapshots());
+    } catch (e) {
+      setError(e.message);
+      setSnapshots([]);
+    }
+  };
+
+  const restore = async (id) => {
+    if (!window.confirm("Put the lists back to this point? The current version is kept too, so this can be undone.")) return;
+    setBusy(true);
+    setError("");
+    try {
+      await restoreSnapshot(id);
+      // The live subscription pushes the restored data to every device,
+      // including this one, so there is nothing else to do here.
+      setOpen(false);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <div style={styles.restoreBar}>
+        <button style={styles.restoreLink} onClick={openPanel}>
+          restore an earlier version
+        </button>
+      </div>
+
+      {open && (
+        <div style={styles.restoreSheet} onClick={() => !busy && setOpen(false)}>
+          <div style={styles.restoreInner} onClick={(e) => e.stopPropagation()}>
+            <SectionTitle>Restore a version</SectionTitle>
+            <div style={{ fontSize: 12.5, color: "#6b6a5e", marginBottom: 10 }}>
+              Every hour a copy is kept, for the last two days, then one a day for a fortnight.
+            </div>
+
+            {error && <div style={{ fontSize: 12.5, color: "#B5502F", marginBottom: 8 }}>{error}</div>}
+            {snapshots === null && <Empty text="Loading..." />}
+            {snapshots?.length === 0 && !error && <Empty text="No restore points yet." />}
+
+            {snapshots?.map((snapshot) => (
+              <div key={snapshot.id} style={styles.restoreRow}>
+                <span>{new Date(snapshot.takenAt).toLocaleString()}</span>
+                <button style={styles.restoreLink} disabled={busy} onClick={() => restore(snapshot.id)}>
+                  restore
+                </button>
+              </div>
+            ))}
+
+            <button style={{ ...styles.addSpendBtn, marginTop: 14 }} onClick={() => setOpen(false)} disabled={busy}>
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function SectionTitle({ children }) {
   return <h2 style={styles.h2}>{children}</h2>;
 }
@@ -2876,6 +2976,59 @@ const styles = {
     lineHeight: "16px",
     cursor: "pointer",
     color: "#2B2A25",
+  },
+  scanUnavailable: {
+    marginTop: 10,
+    fontSize: 12,
+    lineHeight: 1.45,
+    color: "#6b6a5e",
+    background: "#F1EBD9",
+    border: "1px dashed #d8cfb4",
+    borderRadius: 8,
+    padding: "9px 11px",
+  },
+  restoreBar: {
+    display: "flex",
+    justifyContent: "center",
+    padding: "0 0 6px",
+    background: "#F1EBD9",
+  },
+  restoreLink: {
+    background: "none",
+    border: "none",
+    cursor: "pointer",
+    fontFamily: "'IBM Plex Mono', monospace",
+    fontSize: 11,
+    color: "#6E7F54",
+    textDecoration: "underline",
+    padding: 0,
+  },
+  restoreSheet: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(43,42,37,0.45)",
+    display: "flex",
+    alignItems: "flex-end",
+    justifyContent: "center",
+    zIndex: 50,
+  },
+  restoreInner: {
+    background: "#FFFDF8",
+    borderRadius: "14px 14px 0 0",
+    width: "100%",
+    maxWidth: 520,
+    maxHeight: "70vh",
+    overflowY: "auto",
+    padding: 16,
+  },
+  restoreRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    padding: "9px 0",
+    borderBottom: "1px solid #EFE8D6",
+    fontSize: 13,
   },
   addSpendBtn: {
     marginTop: 10,

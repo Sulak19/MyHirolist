@@ -1,0 +1,103 @@
+name: Build and publish add-on
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "README.md"
+      - "**/CHANGELOG.md"
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Nothing is published unless this passes. A broken change therefore leaves
+  # Home Assistant running the previous version rather than taking it down.
+  test:
+    name: Tests and app build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Server tests
+        working-directory: myhirolist/server
+        run: node --test
+
+      - name: App build
+        working-directory: myhirolist/app
+        run: |
+          npm ci
+          npm run build
+
+  publish:
+    name: Publish image
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Work out the version
+        id: version
+        run: echo "value=1.0.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      # Stamped before the build so the published image and config.yaml agree,
+      # but committed only after the build succeeds.
+      - name: Stamp the version into config.yaml
+        run: |
+          sed -i -E "s/^version: .*/version: \"${{ steps.version.outputs.value }}\"/" myhirolist/config.yaml
+          grep '^version:' myhirolist/config.yaml
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push for every architecture
+        uses: home-assistant/builder@2024.03.5
+        with:
+          args: |
+            --target myhirolist
+            --all
+            --image myhirolist-{arch}
+            --docker-hub ghcr.io/${{ github.repository_owner }}
+            --addon
+
+      - name: Record the version in the repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          {
+            echo "## ${{ steps.version.outputs.value }}"
+            echo ""
+            echo "${{ github.event.head_commit.message }}"
+            echo ""
+            cat myhirolist/CHANGELOG.md
+          } > /tmp/changelog && mv /tmp/changelog myhirolist/CHANGELOG.md
+
+          git add myhirolist/config.yaml myhirolist/CHANGELOG.md
+          git commit -m "chore: release ${{ steps.version.outputs.value }} [skip ci]"
+          git push
+
+      # A tag per build, so any past version can be found and reverted to.
+      - name: Tag the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.value }}
+          name: ${{ steps.version.outputs.value }}
+          body: ${{ github.event.head_commit.message }}
+          generate_release_notes: true

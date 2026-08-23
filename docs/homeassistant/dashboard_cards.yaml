@@ -1,0 +1,44 @@
+# Dashboard cards for the MyHiroList sensors.
+#
+# The app itself is in the sidebar, so these are for glancing at the numbers
+# without opening it -- on a wall tablet, or alongside everything else.
+#
+# To use: open a dashboard, three-dot menu > Edit dashboard > Add card >
+# Manual, then paste one of these in.
+
+# --- At-a-glance row ---------------------------------------------------
+type: glance
+title: Home Base
+entities:
+  - entity: sensor.myhirolist_shopping_list
+    name: Shopping
+  - entity: sensor.myhirolist_cleaning_due
+    name: Cleaning
+  - entity: sensor.myhirolist_dog_food_days_left
+    name: Dog food
+  - entity: sensor.myhirolist_expiring_soon
+    name: Expiring
+
+# --- What is actually due ----------------------------------------------
+# type: markdown
+# title: Cleaning due
+# content: >
+#   {% set tasks = state_attr('sensor.myhirolist_cleaning_due', 'tasks') %}
+#   {% if tasks %}
+#   {% for task in tasks %}- {{ task }}
+#   {% endfor %}
+#   {% else %}
+#   Nothing due. 
+#   {% endif %}
+
+# --- Dog food warning, only when it matters ----------------------------
+# type: conditional
+# conditions:
+#   - condition: numeric_state
+#     entity: sensor.myhirolist_dog_food_days_left
+#     below: 7
+# card:
+#   type: markdown
+#   content: >
+#     Dog food is down to
+#     {{ states('sensor.myhirolist_dog_food_days_left') }} days.

@@ -1,0 +1,72 @@
+name: UI preview
+
+# She cannot run a build in the browser, so every push publishes a live page
+# she can look at. It runs on throwaway browser storage, not the household's
+# real data -- so clicking about in it changes nothing at home.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "myhirolist/app/**"
+      - ".github/workflows/preview.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build the preview
+        working-directory: myhirolist/app
+        env:
+          VITE_PREVIEW: "1"
+        run: |
+          npm ci
+          npm run build
+
+      - name: Add a banner so the preview is never mistaken for the real app
+        working-directory: myhirolist/app/dist
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          banner = (
+              '<div style="background:#D9A62E;color:#2B2A25;font:600 13px/1.4 system-ui,sans-serif;'
+              'padding:8px 12px;text-align:center">Preview build &mdash; changes here are not saved '
+              'and do not affect the real app at home.</div>'
+          )
+
+          page = Path("index.html")
+          html = page.read_text(encoding="utf-8")
+          page.write_text(html.replace('<div id="root">', banner + '<div id="root">'), encoding="utf-8")
+          PY
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: myhirolist/app/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
