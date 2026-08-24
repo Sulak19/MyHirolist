@@ -307,6 +307,45 @@ test("anything running low is on the list, meal or no meal", () => {
   assert.deepEqual(needs[0].reasons, ["low"]);
 });
 
+test("homemade staples running low go to prep instead of shopping", () => {
+  const inventory = [
+    { name: "Frozen rice", location: "Freezer", lowStock: true },
+    { name: "Bread", location: "Freezer", lowStock: true },
+    { name: "Garlic koji", location: "Fridge", lowStock: true },
+    { name: "Ginger", location: "Fridge", lowStock: true },
+  ];
+
+  const needs = shoppingNeeds([], MEALS, BATCHES, inventory);
+  assert.deepEqual(needs, []);
+
+  const tasks = prepTasks({}, {}, MEALS, BATCHES, inventory);
+  assert.deepEqual(tasks.map((task) => task.label), [
+    "Cook & freeze rice",
+    "Bake bread",
+    "Make garlic koji",
+    "Prep ginger",
+  ]);
+  assert.ok(tasks.every((task) => task.kind === "stock" && task.week === "this"));
+});
+
+test("a planned homemade staple still stays off shopping while it is low", () => {
+  const meals = [{ id: "ginger-tea", name: "Ginger tea", ingredients: ["Ginger"] }];
+  const inventory = [{ name: "Ginger", location: "Fridge", lowStock: true }];
+
+  const needs = shoppingNeeds([{ plan: { Monday: "ginger-tea" }, week: "this" }], meals, [], inventory);
+  assert.deepEqual(needs, []);
+});
+
+test("homemade staples do not create prep tasks unless they are low", () => {
+  const inventory = [
+    { name: "Frozen rice", location: "Freezer", lowStock: false },
+    { name: "Bread", location: "Freezer", lowStock: false },
+    { name: "Garlic koji", location: "Fridge", lowStock: false },
+    { name: "Ginger", location: "Fridge", lowStock: false },
+  ];
+  assert.deepEqual(prepTasks({}, {}, MEALS, BATCHES, inventory), []);
+});
+
 test("a low staple a meal also wants is listed once, for both reasons", () => {
   const needs = shoppingNeeds(
     [{ plan: { Monday: "hamburg" }, week: "this" }],
@@ -444,4 +483,12 @@ test("a prep task already ticked is not removed when the plan moves on", () => {
   const done = [{ key: "this::Adobo::Marinate.", label: "Marinate.", checked: true, source: "plan" }];
   const out = reconcilePrep(done, []);
   assert.equal(out.length, 1);
+});
+
+test("a completed low-stock prep task clears once stock is replenished", () => {
+  const inventory = [{ name: "Bread", location: "Freezer", lowStock: true }];
+  const [task] = reconcilePrep([], prepTasks({}, {}, MEALS, BATCHES, inventory));
+  const completed = { ...task, checked: true };
+
+  assert.deepEqual(reconcilePrep([completed], []), []);
 });

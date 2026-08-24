@@ -23,6 +23,26 @@ const DAIRY = ["milk", "cheese", "butter", "cream", "yoghurt", "yogurt", "egg"];
 const FROZEN = ["frozen", "ice"];
 const PANTRY = ["rice", "noodle", "pasta", "spaghetti", "sauce", "oil", "vinegar", "sugar", "flour", "starch", "soy", "mirin", "sake", "paste", "stock", "dashi", "gochujang", "gochugaru", "bay leaves", "salt", "pepper", "taco", "chips", "koji", "curry", "spice"];
 
+// These staples are made or prepared at home. Running low means there is
+// kitchen work to do, not something to buy.
+const PREP_ONLY_LOW_STOCK = new Map([
+  ["frozen rice", "Cook & freeze rice"],
+  ["bread", "Bake bread"],
+  ["garlic koji", "Make garlic koji"],
+  ["ginger", "Prep ginger"],
+]);
+
+function prepOnlyLowStock(inventory) {
+  const items = new Map();
+  for (const item of asArray(inventory)) {
+    const key = norm(item?.name);
+    const label = PREP_ONLY_LOW_STOCK.get(key);
+    if (!item?.lowStock || !label || items.has(key)) continue;
+    items.set(key, { key, label });
+  }
+  return items;
+}
+
 // Shopping order, roughly how a supermarket is laid out.
 export const CATEGORY_ORDER = ["Produce", "Meat & fish", "Dairy", "Pantry", "Frozen", "Other"];
 
@@ -237,6 +257,7 @@ export function planWeek({
  */
 export function shoppingNeeds(weeks, meals, batches, inventory) {
   const stocked = availableStock(inventory);
+  const prepOnly = prepOnlyLowStock(inventory);
   const needs = new Map();
 
   const add = (rawName, { category, meal, week, reason }) => {
@@ -261,9 +282,11 @@ export function shoppingNeeds(weeks, meals, batches, inventory) {
   };
 
   // Running low is reason enough to buy something, whether or not a meal
-  // calls for it. Staples run out between meal plans.
+  // calls for it. Staples run out between meal plans. Homemade staples are
+  // handled by prepTasks instead.
   for (const item of asArray(inventory)) {
     if (!item?.lowStock || !item.name) continue;
+    if (prepOnly.has(norm(item.name))) continue;
     add(item.name, {
       // Where it lives is a better hint than its name: a "Pantry" item is a
       // pantry item even if it is called "tomato".
@@ -280,6 +303,7 @@ export function shoppingNeeds(weeks, meals, batches, inventory) {
     for (const { meal } of resolvePlanned(plan, meals, batches)) {
       for (const ingredient of asArray(meal?.ingredients)) {
         if (stocked.has(norm(ingredient))) continue;
+        if (prepOnly.has(norm(ingredient))) continue;
         add(ingredient, { meal: meal.name, week, reason: "meal" });
       }
     }
@@ -397,8 +421,14 @@ export function reconcileShopping(shopping, needs, dismissed = []) {
  * Returns [{ key, label, dayOf, meal, week, kind }]; `key` is stable so the
  * list can be reconciled without losing which tasks are already ticked.
  */
-export function prepTasks(thisWeekPlan, nextWeekPlan, meals, batches) {
-  const tasks = [];
+export function prepTasks(thisWeekPlan, nextWeekPlan, meals, batches, inventory = []) {
+  const tasks = [...prepOnlyLowStock(inventory).values()].map(({ label }) => ({
+    label,
+    dayOf: null,
+    meal: "Low stock",
+    kind: "stock",
+    week: "this",
+  }));
   const seen = new Set();
 
   const collect = (plan, week) => {
@@ -494,9 +524,9 @@ export function reconcilePrep(existing, tasks) {
 
     if (wanted.has(item.key)) {
       const task = wanted.get(item.key);
-      kept.push({ ...item, label: task.label, dayOf: task.dayOf, meal: task.meal, week: task.week });
+      kept.push({ ...item, label: task.label, dayOf: task.dayOf, meal: task.meal, week: task.week, kind: task.kind });
       seenKeys.add(item.key);
-    } else if (item.checked) {
+    } else if (item.checked && item.kind !== "stock") {
       kept.push(item); // already done - dropping it would feel like a bug
       seenKeys.add(item.key);
     }
@@ -511,6 +541,7 @@ export function reconcilePrep(existing, tasks) {
       dayOf: task.dayOf,
       meal: task.meal,
       week: task.week,
+      kind: task.kind,
       checked: false,
       source: "plan",
     });
