@@ -1,3 +1,9 @@
+## 1.0.15
+
+Clarify saved meal search and creation (#2)
+
+Separate saved-meal search and filtering from the dedicated add-meal bottom sheet.
+
 ## 1.0.14
 
 Route homemade low-stock staples to prep (#1)
