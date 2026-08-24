@@ -1,3 +1,9 @@
+## 1.0.17
+
+Split Dogs and House into focused tabs (#4)
+
+Promote Dogs to top-level navigation and split Dogs and House into focused sub-tabs while preserving saved data.
+
 ## 1.0.16
 
 Keep homemade low-stock staples out of Shopping (#3)
