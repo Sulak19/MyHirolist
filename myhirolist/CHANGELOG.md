@@ -1,3 +1,9 @@
+## 1.0.14
+
+Route homemade low-stock staples to prep (#1)
+
+Keep frozen rice, bread, garlic koji, and ginger off shopping when low and create prep tasks instead.
+
 ## 1.0.13
 
 feat(prep): automatic, split from day-of, and redesigned
