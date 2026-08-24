@@ -1330,6 +1330,7 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
   const [name, setName] = useState("");
   const [tagVals, setTagVals] = useState(new Set(["Misc"]));
   const [url, setUrl] = useState("");
+  const [showAddMeal, setShowAddMeal] = useState(false);
   const selected = new Set(selectedIds);
   const setSelected = (updater) => {
     const next = typeof updater === "function" ? updater(selected) : updater;
@@ -1371,13 +1372,20 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
     setRandomPick(eligible[Math.floor(Math.random() * eligible.length)]);
   };
 
+  const resetAddDraft = () => {
+    setName("");
+    setUrl("");
+    setTagVals(new Set(["Misc"]));
+  };
+  const closeAddMeal = () => {
+    resetAddDraft();
+    setShowAddMeal(false);
+  };
   const add = () => {
     if (!name.trim()) return;
     const tags = tagVals.size > 0 ? [...tagVals] : ["Misc"];
     onChange([...list, { id: uid(), name: name.trim(), tags, url: url.trim() || undefined, ingredients: [] }]);
-    setName("");
-    setUrl("");
-    setTagVals(new Set(["Misc"]));
+    closeAddMeal();
   };
   const remove = (id) => {
     onChange(list.filter((m) => m.id !== id));
@@ -1430,38 +1438,55 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
 
   return (
     <div>
-      <SectionTitle>Meal prep ideas</SectionTitle>
-      <div style={{ display: "flex", gap: 8 }}>
-        <input style={styles.input} placeholder="Dish name" value={name} onChange={(e) => setName(e.target.value)} />
-        <IconBtn onClick={add} />
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
+        <h2 style={{ ...styles.h2, margin: 0 }}>Saved meals</h2>
+        <button
+          style={{ ...styles.addSpendBtn, marginTop: 0, padding: "7px 11px", flexShrink: 0 }}
+          onClick={() => setShowAddMeal(true)}
+        >
+          <Plus size={14} /> Add meal
+        </button>
       </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
-        {PROTEIN_ORDER.map((t) => {
-          const active = tagVals.has(t);
-          return (
-            <button
-              key={t}
-              onClick={() => toggleAddTag(t)}
-              style={{
-                ...styles.tabBtn,
-                padding: "5px 10px",
-                fontSize: 11.5,
-                background: active ? C.teal : C.card,
-                color: active ? C.paper : C.ink,
-                borderColor: active ? C.teal : C.line,
-              }}
-            >
-              {t}
-            </button>
-          );
-        })}
-      </div>
+
       <input
-        style={{ ...styles.input, marginTop: 8, width: "100%" }}
-        placeholder="Recipe link (optional)"
-        value={url}
-        onChange={(e) => setUrl(e.target.value)}
+        style={{ ...styles.input, width: "100%" }}
+        placeholder="Search saved meals or ingredients"
+        aria-label="Search saved meals or ingredients"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
       />
+
+      <div style={{ marginTop: 14 }}>
+        <div style={{ fontSize: 11, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
+          Filter by tag — tap any, matches all selected
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {PROTEIN_ORDER.map((tag) => {
+            const active = browseFilter.has(tag);
+            return (
+              <button
+                key={tag}
+                onClick={() => toggleBrowseFilter(tag)}
+                style={{
+                  ...styles.tabBtn,
+                  padding: "5px 10px",
+                  fontSize: 11.5,
+                  background: active ? C.sage : C.card,
+                  color: active ? C.paper : C.ink,
+                  borderColor: active ? C.sage : C.line,
+                }}
+              >
+                {tag}
+              </button>
+            );
+          })}
+          {browseFilter.size > 0 && (
+            <button style={{ ...styles.linkBtnSmall, padding: "5px 6px" }} onClick={() => setBrowseFilter(new Set())}>
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
 
       <div style={{ ...styles.card, marginTop: 16 }}>
         <div style={styles.cardLabel}>What meats do you have?</div>
@@ -1525,47 +1550,6 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
           <ShoppingCart size={14} /> Add {selected.size} meal{selected.size === 1 ? "" : "s"} to shopping & prep lists
         </button>
       )}
-
-      <div style={{ marginTop: 18 }}>
-        <input
-          style={{ ...styles.input, width: "100%" }}
-          placeholder="Search meals or ingredients"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-      </div>
-
-      <div style={{ marginTop: 14 }}>
-        <div style={{ fontSize: 11, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
-          Filter by tag — tap any, matches all selected
-        </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-          {PROTEIN_ORDER.map((tag) => {
-            const active = browseFilter.has(tag);
-            return (
-              <button
-                key={tag}
-                onClick={() => toggleBrowseFilter(tag)}
-                style={{
-                  ...styles.tabBtn,
-                  padding: "5px 10px",
-                  fontSize: 11.5,
-                  background: active ? C.sage : C.card,
-                  color: active ? C.paper : C.ink,
-                  borderColor: active ? C.sage : C.line,
-                }}
-              >
-                {tag}
-              </button>
-            );
-          })}
-          {browseFilter.size > 0 && (
-            <button style={{ ...styles.linkBtnSmall, padding: "5px 6px" }} onClick={() => setBrowseFilter(new Set())}>
-              Clear
-            </button>
-          )}
-        </div>
-      </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
         {filteredList.map((m) => {
@@ -1643,8 +1627,99 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
           );
         })}
       </div>
-      {list.length === 0 && <Empty text="No meal ideas yet — add your go-tos above." />}
+      {list.length === 0 && <Empty text="No saved meals yet — use Add meal to save your go-tos." />}
       {list.length > 0 && filteredList.length === 0 && <Empty text="No meals match that filter." />}
+
+      {showAddMeal && (
+        <div style={styles.restoreSheet} onClick={closeAddMeal}>
+          <form
+            style={styles.restoreInner}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="add-meal-title"
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={(e) => {
+              e.preventDefault();
+              add();
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              <h2 id="add-meal-title" style={{ ...styles.h2, margin: 0 }}>Add a new meal</h2>
+              <button type="button" aria-label="Close add meal form" style={styles.xBtn} onClick={closeAddMeal}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <Field label="Meal name">
+                <input
+                  autoFocus
+                  style={{ ...styles.input, width: "100%" }}
+                  placeholder="e.g. Chicken adobo"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </Field>
+            </div>
+
+            <div style={{ marginTop: 14 }}>
+              <div style={{ fontSize: 11, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
+                Tags
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {PROTEIN_ORDER.map((tag) => {
+                  const active = tagVals.has(tag);
+                  return (
+                    <button
+                      type="button"
+                      key={tag}
+                      onClick={() => toggleAddTag(tag)}
+                      style={{
+                        ...styles.tabBtn,
+                        padding: "5px 10px",
+                        fontSize: 11.5,
+                        background: active ? C.teal : C.card,
+                        color: active ? C.paper : C.ink,
+                        borderColor: active ? C.teal : C.line,
+                      }}
+                    >
+                      {tag}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={{ marginTop: 14 }}>
+              <Field label="Recipe link (optional)">
+                <input
+                  style={{ ...styles.input, width: "100%" }}
+                  placeholder="https://…"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                />
+              </Field>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18 }}>
+              <button
+                type="button"
+                style={{ ...styles.putAwayBtn, padding: "8px 13px", fontSize: 13 }}
+                onClick={closeAddMeal}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={!name.trim()}
+                style={{ ...styles.addSpendBtn, marginTop: 0, opacity: name.trim() ? 1 : 0.45 }}
+              >
+                Save meal
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
