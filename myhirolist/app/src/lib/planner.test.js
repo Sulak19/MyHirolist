@@ -11,6 +11,8 @@ import {
   planWeek,
   shoppingNeeds,
   reconcileShopping,
+  isPrepOnlyLowStock,
+  removePrepOnlyShoppingItems,
   prepTasks,
   splitPrepNote,
   reconcilePrep,
@@ -326,6 +328,34 @@ test("homemade staples running low go to prep instead of shopping", () => {
     "Prep ginger",
   ]);
   assert.ok(tasks.every((task) => task.kind === "stock" && task.week === "this"));
+});
+
+test("the shared prep-only check covers every shopping entry point", () => {
+  const inventory = [
+    { name: "Frozen rice", lowStock: true },
+    { name: "Bread", lowStock: true },
+    { name: "Garlic koji", lowStock: true },
+    { name: "Ginger", lowStock: true },
+  ];
+
+  for (const name of ["Frozen rice", "Bread", "Garlic koji", "Ginger"]) {
+    assert.equal(isPrepOnlyLowStock(name, inventory), true);
+  }
+  assert.equal(isPrepOnlyLowStock("Soy sauce", inventory), false);
+});
+
+test("stale prep-only staples are removed from shopping while low", () => {
+  const shopping = [
+    { name: "Bread", checked: false },
+    { name: "Ginger", checked: true },
+    { name: "Milk", checked: false },
+  ];
+  const inventory = [
+    { name: "Bread", lowStock: true },
+    { name: "Ginger", lowStock: true },
+  ];
+
+  assert.deepEqual(removePrepOnlyShoppingItems(shopping, inventory), [{ name: "Milk", checked: false }]);
 });
 
 test("a planned homemade staple still stays off shopping while it is low", () => {
