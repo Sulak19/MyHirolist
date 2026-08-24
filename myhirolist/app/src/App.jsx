@@ -354,8 +354,8 @@ function useAutoSave(data, ready, setSaveStatus, setSaveError, isRemoteUpdateRef
   }, [flush]);
 }
 
-// Nine flat tabs was too many thumbs-worth on a phone, and five of them were
-// all "food". Four groups now, each holding the screens it owns. `tab` is still
+// Keep the top level organised by household area, with related screens grouped
+// underneath. `tab` is still
 // the leaf screen key, so every existing setTab("fridge") link and every
 // tab === "x" branch below works unchanged - only the strip is grouped.
 const GROUPS = [
@@ -374,12 +374,21 @@ const GROUPS = [
   },
   { key: "shopping", label: "Shopping", icon: ShoppingCart, screens: [{ key: "shopping", label: "Shopping" }] },
   {
+    key: "dogs",
+    label: "Dogs",
+    icon: Dog,
+    screens: [
+      { key: "dogFood", label: "Food & treats", icon: Dog },
+      { key: "dogShopping", label: "Shopping list", icon: ShoppingCart },
+    ],
+  },
+  {
     key: "house",
     label: "House",
     icon: Sparkles,
     screens: [
       { key: "cleaning", label: "Cleaning", icon: Sparkles },
-      { key: "dog", label: "Dog", icon: Dog },
+      { key: "oddJobs", label: "Odd jobs", icon: HomeIcon },
     ],
   },
 ];
@@ -571,6 +580,7 @@ export default function HomeBase() {
         )}
         {tab === "cleaning" && (
           <CleaningTab
+            view="cleaning"
             list={data.cleaning}
             onChange={(v) => update("cleaning", v)}
             equipment={data.cleaningEquipment || ""}
@@ -579,8 +589,20 @@ export default function HomeBase() {
             onOddJobsChange={(v) => update("oddJobs", v)}
           />
         )}
-        {tab === "dog" && (
+        {tab === "oddJobs" && (
+          <CleaningTab
+            view="oddJobs"
+            list={data.cleaning}
+            onChange={(v) => update("cleaning", v)}
+            equipment={data.cleaningEquipment || ""}
+            onEquipmentChange={(v) => update("cleaningEquipment", v)}
+            oddJobs={data.oddJobs}
+            onOddJobsChange={(v) => update("oddJobs", v)}
+          />
+        )}
+        {(tab === "dogFood" || tab === "dogShopping") && (
           <DogTab
+            view={tab}
             dogFood={data.dogFood}
             onChange={(v) => update("dogFood", v)}
             dogShoppingList={data.dogShoppingList}
@@ -598,7 +620,7 @@ export default function HomeBase() {
         {tab === "batch" && <BatchTab list={data.batchCooking} onChange={(v) => update("batchCooking", v)} />}
       </main>
 
-      {groupOf(tab).key === "house" && <RestorePanel />}
+      {(groupOf(tab).key === "house" || groupOf(tab).key === "dogs") && <RestorePanel />}
     </div>
   );
 }
@@ -821,7 +843,7 @@ function HomeTab({ data, setTab, onCleaningChange }) {
           label="Dog food"
           value={lowStockDog ? "Reorder soon" : `~${minDaysLeft ?? "?"} day${minDaysLeft === 1 ? "" : "s"} left`}
           alert={lowStockDog}
-          onClick={() => setTab("dog")}
+          onClick={() => setTab("dogFood")}
         />
         <SummaryCard
           icon={Refrigerator}
@@ -2101,7 +2123,7 @@ function daysOverdue(task) {
   return over >= 0 ? over : null;
 }
 
-function CleaningTab({ list, onChange, equipment, onEquipmentChange, oddJobs, onOddJobsChange }) {
+function CleaningTab({ view, list, onChange, equipment, onEquipmentChange, oddJobs, onOddJobsChange }) {
   const [name, setName] = useState("");
   const [freq, setFreq] = useState("Weekly");
 
@@ -2137,7 +2159,9 @@ function CleaningTab({ list, onChange, equipment, onEquipmentChange, oddJobs, on
 
   return (
     <div>
-      <SectionTitle>Cleaning routine</SectionTitle>
+      {view === "cleaning" && (
+        <>
+          <SectionTitle>Cleaning routine</SectionTitle>
       <input
         style={{ ...styles.input, width: "100%", marginBottom: 12, fontSize: 12.5, color: C.inkSoft }}
         value={equipment}
@@ -2203,9 +2227,12 @@ function CleaningTab({ list, onChange, equipment, onEquipmentChange, oddJobs, on
           );
         })}
         {list.length === 0 && <Empty text="No cleaning tasks yet." />}
-      </div>
+          </div>
+        </>
+      )}
 
-      <div style={{ marginTop: 24 }}>
+      {view === "oddJobs" && (
+        <div>
         <SectionTitle>Odd jobs</SectionTitle>
         <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 10 }}>
           One-offs and irregular jobs — fix the fence, book the car service, clean the gutters. No fixed schedule, just a list.
@@ -2328,13 +2355,14 @@ function CleaningTab({ list, onChange, equipment, onEquipmentChange, oddJobs, on
             </div>
           </div>
         )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
 
 /* ---------------- DOG FOOD ---------------- */
-function DogTab({ dogFood, onChange, dogShoppingList, onDogShoppingChange }) {
+function DogTab({ view, dogFood, onChange, dogShoppingList, onDogShoppingChange }) {
   const setDog = (id, patch) => onChange({ ...dogFood, dogs: dogFood.dogs.map((d) => (d.id === id ? { ...d, ...patch } : d)) });
   const addDog = () =>
     onChange({
@@ -2427,7 +2455,9 @@ function DogTab({ dogFood, onChange, dogShoppingList, onDogShoppingChange }) {
 
   return (
     <div>
-      <SectionTitle>Dog food</SectionTitle>
+      {view === "dogFood" && (
+        <>
+          <SectionTitle>Dog food</SectionTitle>
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         {dogFood.dogs.map((d) => {
           const low = d.packsOnHand <= d.reorderAtPacks;
@@ -2605,9 +2635,12 @@ function DogTab({ dogFood, onChange, dogShoppingList, onDogShoppingChange }) {
           ))}
           {dogFood.extras.length === 0 && <Empty text="Nothing added yet." />}
         </div>
-      </div>
+          </div>
+        </>
+      )}
 
-      <div style={{ marginTop: 24 }}>
+      {view === "dogShopping" && (
+        <div>
         <SectionTitle>Dog shopping list</SectionTitle>
         <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 10 }}>
           Separate from your regular shopping list — dog food and supplies only.
@@ -2660,7 +2693,8 @@ function DogTab({ dogFood, onChange, dogShoppingList, onDogShoppingChange }) {
             Clear checked
           </button>
         )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
