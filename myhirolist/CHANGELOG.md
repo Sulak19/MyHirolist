@@ -1,3 +1,9 @@
+## 1.0.16
+
+Keep homemade low-stock staples out of Shopping (#3)
+
+Apply the prep-only rule to every shopping entry point and remove stale Shopping entries while those staples are low.
+
 ## 1.0.15
 
 Clarify saved meal search and creation (#2)
