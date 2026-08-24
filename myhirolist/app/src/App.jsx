@@ -25,18 +25,7 @@ import { loadHouseholdData, saveHouseholdData, subscribeToHouseholdData, scanIma
 import { useScanAvailable } from "./lib/useCapabilities.js";
 import { mergeWithDefaults } from "./lib/merge.js";
 import { rolloverWeeks, EMPTY_WEEK } from "./lib/weeks.js";
-import {
-  planWeek,
-  replan,
-  shoppingNeeds,
-  reconcileShopping,
-  isPrepOnlyLowStock,
-  removePrepOnlyShoppingItems,
-  prepTasks,
-  reconcilePrep,
-  CATEGORY_ORDER,
-  locationCategory,
-} from "./lib/planner.js";
+import { planWeek, replan, shoppingNeeds, reconcileShopping, prepTasks, reconcilePrep, CATEGORY_ORDER, locationCategory } from "./lib/planner.js";
 import { getToday } from "./lib/api.js";
 import { C, useTheme } from "./lib/theme.js";
 
@@ -255,8 +244,7 @@ function usePlanShopping(data, setData, ready) {
       data.batchCooking,
       data.inventory
     );
-    const cleanedShopping = removePrepOnlyShoppingItems(data.shopping, data.inventory);
-    const { items, dismissed } = reconcileShopping(cleanedShopping, needs, data.dismissedShopping);
+    const { items, dismissed } = reconcileShopping(data.shopping, needs, data.dismissedShopping);
 
     // Only write when something actually changed, or this loops forever
     // against its own save.
@@ -354,8 +342,8 @@ function useAutoSave(data, ready, setSaveStatus, setSaveError, isRemoteUpdateRef
   }, [flush]);
 }
 
-// Nine flat tabs was too many thumbs-worth on a phone, and five of them were
-// all "food". Four groups now, each holding the screens it owns. `tab` is still
+// Keep the top level organised by household area, with related screens grouped
+// underneath. `tab` is still
 // the leaf screen key, so every existing setTab("fridge") link and every
 // tab === "x" branch below works unchanged - only the strip is grouped.
 const GROUPS = [
@@ -374,12 +362,21 @@ const GROUPS = [
   },
   { key: "shopping", label: "Shopping", icon: ShoppingCart, screens: [{ key: "shopping", label: "Shopping" }] },
   {
+    key: "dogs",
+    label: "Dogs",
+    icon: Dog,
+    screens: [
+      { key: "dogFood", label: "Food & treats", icon: Dog },
+      { key: "dogShopping", label: "Shopping list", icon: ShoppingCart },
+    ],
+  },
+  {
     key: "house",
     label: "House",
     icon: Sparkles,
     screens: [
       { key: "cleaning", label: "Cleaning", icon: Sparkles },
-      { key: "dog", label: "Dog", icon: Dog },
+      { key: "oddJobs", label: "Odd jobs", icon: HomeIcon },
     ],
   },
 ];
@@ -571,6 +568,7 @@ export default function HomeBase() {
         )}
         {tab === "cleaning" && (
           <CleaningTab
+            view="cleaning"
             list={data.cleaning}
             onChange={(v) => update("cleaning", v)}
             equipment={data.cleaningEquipment || ""}
@@ -579,8 +577,20 @@ export default function HomeBase() {
             onOddJobsChange={(v) => update("oddJobs", v)}
           />
         )}
-        {tab === "dog" && (
+        {tab === "oddJobs" && (
+          <CleaningTab
+            view="oddJobs"
+            list={data.cleaning}
+            onChange={(v) => update("cleaning", v)}
+            equipment={data.cleaningEquipment || ""}
+            onEquipmentChange={(v) => update("cleaningEquipment", v)}
+            oddJobs={data.oddJobs}
+            onOddJobsChange={(v) => update("oddJobs", v)}
+          />
+        )}
+        {(tab === "dogFood" || tab === "dogShopping") && (
           <DogTab
+            view={tab}
             dogFood={data.dogFood}
             onChange={(v) => update("dogFood", v)}
             dogShoppingList={data.dogShoppingList}
@@ -598,7 +608,7 @@ export default function HomeBase() {
         {tab === "batch" && <BatchTab list={data.batchCooking} onChange={(v) => update("batchCooking", v)} />}
       </main>
 
-      {groupOf(tab).key === "house" && <RestorePanel />}
+      {(groupOf(tab).key === "house" || groupOf(tab).key === "dogs") && <RestorePanel />}
     </div>
   );
 }
@@ -821,7 +831,7 @@ function HomeTab({ data, setTab, onCleaningChange }) {
           label="Dog food"
           value={lowStockDog ? "Reorder soon" : `~${minDaysLeft ?? "?"} day${minDaysLeft === 1 ? "" : "s"} left`}
           alert={lowStockDog}
-          onClick={() => setTab("dog")}
+          onClick={() => setTab("dogFood")}
         />
         <SummaryCard
           icon={Refrigerator}
@@ -1285,7 +1295,7 @@ function addMealsToShoppingList(mealsArr, shoppingList, onShoppingChange, invent
   mealsArr.forEach((m) => {
     (m.ingredients || []).forEach((ing) => {
       const key = ing.trim().toLowerCase();
-      if (key && !existingNames.has(key) && !stockedNames.has(key) && !isPrepOnlyLowStock(ing, inventory)) {
+      if (key && !existingNames.has(key) && !stockedNames.has(key)) {
         existingNames.add(key);
         newItems.push({ id: uid(), name: ing.trim(), checked: false });
       }
@@ -1342,7 +1352,6 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
   const [name, setName] = useState("");
   const [tagVals, setTagVals] = useState(new Set(["Misc"]));
   const [url, setUrl] = useState("");
-  const [showAddMeal, setShowAddMeal] = useState(false);
   const selected = new Set(selectedIds);
   const setSelected = (updater) => {
     const next = typeof updater === "function" ? updater(selected) : updater;
@@ -1384,20 +1393,13 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
     setRandomPick(eligible[Math.floor(Math.random() * eligible.length)]);
   };
 
-  const resetAddDraft = () => {
-    setName("");
-    setUrl("");
-    setTagVals(new Set(["Misc"]));
-  };
-  const closeAddMeal = () => {
-    resetAddDraft();
-    setShowAddMeal(false);
-  };
   const add = () => {
     if (!name.trim()) return;
     const tags = tagVals.size > 0 ? [...tagVals] : ["Misc"];
     onChange([...list, { id: uid(), name: name.trim(), tags, url: url.trim() || undefined, ingredients: [] }]);
-    closeAddMeal();
+    setName("");
+    setUrl("");
+    setTagVals(new Set(["Misc"]));
   };
   const remove = (id) => {
     onChange(list.filter((m) => m.id !== id));
@@ -1450,55 +1452,38 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
-        <h2 style={{ ...styles.h2, margin: 0 }}>Saved meals</h2>
-        <button
-          style={{ ...styles.addSpendBtn, marginTop: 0, padding: "7px 11px", flexShrink: 0 }}
-          onClick={() => setShowAddMeal(true)}
-        >
-          <Plus size={14} /> Add meal
-        </button>
+      <SectionTitle>Meal prep ideas</SectionTitle>
+      <div style={{ display: "flex", gap: 8 }}>
+        <input style={styles.input} placeholder="Dish name" value={name} onChange={(e) => setName(e.target.value)} />
+        <IconBtn onClick={add} />
       </div>
-
-      <input
-        style={{ ...styles.input, width: "100%" }}
-        placeholder="Search saved meals or ingredients"
-        aria-label="Search saved meals or ingredients"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-      />
-
-      <div style={{ marginTop: 14 }}>
-        <div style={{ fontSize: 11, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
-          Filter by tag — tap any, matches all selected
-        </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-          {PROTEIN_ORDER.map((tag) => {
-            const active = browseFilter.has(tag);
-            return (
-              <button
-                key={tag}
-                onClick={() => toggleBrowseFilter(tag)}
-                style={{
-                  ...styles.tabBtn,
-                  padding: "5px 10px",
-                  fontSize: 11.5,
-                  background: active ? C.sage : C.card,
-                  color: active ? C.paper : C.ink,
-                  borderColor: active ? C.sage : C.line,
-                }}
-              >
-                {tag}
-              </button>
-            );
-          })}
-          {browseFilter.size > 0 && (
-            <button style={{ ...styles.linkBtnSmall, padding: "5px 6px" }} onClick={() => setBrowseFilter(new Set())}>
-              Clear
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+        {PROTEIN_ORDER.map((t) => {
+          const active = tagVals.has(t);
+          return (
+            <button
+              key={t}
+              onClick={() => toggleAddTag(t)}
+              style={{
+                ...styles.tabBtn,
+                padding: "5px 10px",
+                fontSize: 11.5,
+                background: active ? C.teal : C.card,
+                color: active ? C.paper : C.ink,
+                borderColor: active ? C.teal : C.line,
+              }}
+            >
+              {t}
             </button>
-          )}
-        </div>
+          );
+        })}
       </div>
+      <input
+        style={{ ...styles.input, marginTop: 8, width: "100%" }}
+        placeholder="Recipe link (optional)"
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+      />
 
       <div style={{ ...styles.card, marginTop: 16 }}>
         <div style={styles.cardLabel}>What meats do you have?</div>
@@ -1562,6 +1547,47 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
           <ShoppingCart size={14} /> Add {selected.size} meal{selected.size === 1 ? "" : "s"} to shopping & prep lists
         </button>
       )}
+
+      <div style={{ marginTop: 18 }}>
+        <input
+          style={{ ...styles.input, width: "100%" }}
+          placeholder="Search meals or ingredients"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      </div>
+
+      <div style={{ marginTop: 14 }}>
+        <div style={{ fontSize: 11, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
+          Filter by tag — tap any, matches all selected
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {PROTEIN_ORDER.map((tag) => {
+            const active = browseFilter.has(tag);
+            return (
+              <button
+                key={tag}
+                onClick={() => toggleBrowseFilter(tag)}
+                style={{
+                  ...styles.tabBtn,
+                  padding: "5px 10px",
+                  fontSize: 11.5,
+                  background: active ? C.sage : C.card,
+                  color: active ? C.paper : C.ink,
+                  borderColor: active ? C.sage : C.line,
+                }}
+              >
+                {tag}
+              </button>
+            );
+          })}
+          {browseFilter.size > 0 && (
+            <button style={{ ...styles.linkBtnSmall, padding: "5px 6px" }} onClick={() => setBrowseFilter(new Set())}>
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
         {filteredList.map((m) => {
@@ -1639,99 +1665,8 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
           );
         })}
       </div>
-      {list.length === 0 && <Empty text="No saved meals yet — use Add meal to save your go-tos." />}
+      {list.length === 0 && <Empty text="No meal ideas yet — add your go-tos above." />}
       {list.length > 0 && filteredList.length === 0 && <Empty text="No meals match that filter." />}
-
-      {showAddMeal && (
-        <div style={styles.restoreSheet} onClick={closeAddMeal}>
-          <form
-            style={styles.restoreInner}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="add-meal-title"
-            onClick={(e) => e.stopPropagation()}
-            onSubmit={(e) => {
-              e.preventDefault();
-              add();
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-              <h2 id="add-meal-title" style={{ ...styles.h2, margin: 0 }}>Add a new meal</h2>
-              <button type="button" aria-label="Close add meal form" style={styles.xBtn} onClick={closeAddMeal}>
-                <X size={18} />
-              </button>
-            </div>
-
-            <div style={{ marginTop: 16 }}>
-              <Field label="Meal name">
-                <input
-                  autoFocus
-                  style={{ ...styles.input, width: "100%" }}
-                  placeholder="e.g. Chicken adobo"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                />
-              </Field>
-            </div>
-
-            <div style={{ marginTop: 14 }}>
-              <div style={{ fontSize: 11, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
-                Tags
-              </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {PROTEIN_ORDER.map((tag) => {
-                  const active = tagVals.has(tag);
-                  return (
-                    <button
-                      type="button"
-                      key={tag}
-                      onClick={() => toggleAddTag(tag)}
-                      style={{
-                        ...styles.tabBtn,
-                        padding: "5px 10px",
-                        fontSize: 11.5,
-                        background: active ? C.teal : C.card,
-                        color: active ? C.paper : C.ink,
-                        borderColor: active ? C.teal : C.line,
-                      }}
-                    >
-                      {tag}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div style={{ marginTop: 14 }}>
-              <Field label="Recipe link (optional)">
-                <input
-                  style={{ ...styles.input, width: "100%" }}
-                  placeholder="https://…"
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                />
-              </Field>
-            </div>
-
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18 }}>
-              <button
-                type="button"
-                style={{ ...styles.putAwayBtn, padding: "8px 13px", fontSize: 13 }}
-                onClick={closeAddMeal}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={!name.trim()}
-                style={{ ...styles.addSpendBtn, marginTop: 0, opacity: name.trim() ? 1 : 0.45 }}
-              >
-                Save meal
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
     </div>
   );
 }
@@ -2101,7 +2036,7 @@ function daysOverdue(task) {
   return over >= 0 ? over : null;
 }
 
-function CleaningTab({ list, onChange, equipment, onEquipmentChange, oddJobs, onOddJobsChange }) {
+function CleaningTab({ view, list, onChange, equipment, onEquipmentChange, oddJobs, onOddJobsChange }) {
   const [name, setName] = useState("");
   const [freq, setFreq] = useState("Weekly");
 
@@ -2137,7 +2072,9 @@ function CleaningTab({ list, onChange, equipment, onEquipmentChange, oddJobs, on
 
   return (
     <div>
-      <SectionTitle>Cleaning routine</SectionTitle>
+      {view === "cleaning" && (
+        <>
+          <SectionTitle>Cleaning routine</SectionTitle>
       <input
         style={{ ...styles.input, width: "100%", marginBottom: 12, fontSize: 12.5, color: C.inkSoft }}
         value={equipment}
@@ -2203,9 +2140,12 @@ function CleaningTab({ list, onChange, equipment, onEquipmentChange, oddJobs, on
           );
         })}
         {list.length === 0 && <Empty text="No cleaning tasks yet." />}
-      </div>
+          </div>
+        </>
+      )}
 
-      <div style={{ marginTop: 24 }}>
+      {view === "oddJobs" && (
+        <div>
         <SectionTitle>Odd jobs</SectionTitle>
         <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 10 }}>
           One-offs and irregular jobs — fix the fence, book the car service, clean the gutters. No fixed schedule, just a list.
@@ -2328,13 +2268,14 @@ function CleaningTab({ list, onChange, equipment, onEquipmentChange, oddJobs, on
             </div>
           </div>
         )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
 
 /* ---------------- DOG FOOD ---------------- */
-function DogTab({ dogFood, onChange, dogShoppingList, onDogShoppingChange }) {
+function DogTab({ view, dogFood, onChange, dogShoppingList, onDogShoppingChange }) {
   const setDog = (id, patch) => onChange({ ...dogFood, dogs: dogFood.dogs.map((d) => (d.id === id ? { ...d, ...patch } : d)) });
   const addDog = () =>
     onChange({
@@ -2427,7 +2368,9 @@ function DogTab({ dogFood, onChange, dogShoppingList, onDogShoppingChange }) {
 
   return (
     <div>
-      <SectionTitle>Dog food</SectionTitle>
+      {view === "dogFood" && (
+        <>
+          <SectionTitle>Dog food</SectionTitle>
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         {dogFood.dogs.map((d) => {
           const low = d.packsOnHand <= d.reorderAtPacks;
@@ -2605,9 +2548,12 @@ function DogTab({ dogFood, onChange, dogShoppingList, onDogShoppingChange }) {
           ))}
           {dogFood.extras.length === 0 && <Empty text="Nothing added yet." />}
         </div>
-      </div>
+          </div>
+        </>
+      )}
 
-      <div style={{ marginTop: 24 }}>
+      {view === "dogShopping" && (
+        <div>
         <SectionTitle>Dog shopping list</SectionTitle>
         <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 10 }}>
           Separate from your regular shopping list — dog food and supplies only.
@@ -2660,7 +2606,8 @@ function DogTab({ dogFood, onChange, dogShoppingList, onDogShoppingChange }) {
             Clear checked
           </button>
         )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
