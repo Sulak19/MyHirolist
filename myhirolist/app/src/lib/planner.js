@@ -43,6 +43,18 @@ function prepOnlyLowStock(inventory) {
   return items;
 }
 
+export function isPrepOnlyLowStock(name, inventory) {
+  return prepOnlyLowStock(inventory).has(norm(name));
+}
+
+// Entries created by the older Meals-tab helper had no source marker, so the
+// normal shopping reconciliation treats them as hand-added and preserves
+// them. The household rule is stronger here: while one of these homemade
+// staples is low, it belongs in Prep and nowhere in Shopping.
+export function removePrepOnlyShoppingItems(shopping, inventory) {
+  return asArray(shopping).filter((item) => !isPrepOnlyLowStock(item?.name, inventory));
+}
+
 // Shopping order, roughly how a supermarket is laid out.
 export const CATEGORY_ORDER = ["Produce", "Meat & fish", "Dairy", "Pantry", "Frozen", "Other"];
 

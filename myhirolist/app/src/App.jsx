@@ -25,7 +25,18 @@ import { loadHouseholdData, saveHouseholdData, subscribeToHouseholdData, scanIma
 import { useScanAvailable } from "./lib/useCapabilities.js";
 import { mergeWithDefaults } from "./lib/merge.js";
 import { rolloverWeeks, EMPTY_WEEK } from "./lib/weeks.js";
-import { planWeek, replan, shoppingNeeds, reconcileShopping, prepTasks, reconcilePrep, CATEGORY_ORDER, locationCategory } from "./lib/planner.js";
+import {
+  planWeek,
+  replan,
+  shoppingNeeds,
+  reconcileShopping,
+  isPrepOnlyLowStock,
+  removePrepOnlyShoppingItems,
+  prepTasks,
+  reconcilePrep,
+  CATEGORY_ORDER,
+  locationCategory,
+} from "./lib/planner.js";
 import { getToday } from "./lib/api.js";
 import { C, useTheme } from "./lib/theme.js";
 
@@ -244,7 +255,8 @@ function usePlanShopping(data, setData, ready) {
       data.batchCooking,
       data.inventory
     );
-    const { items, dismissed } = reconcileShopping(data.shopping, needs, data.dismissedShopping);
+    const cleanedShopping = removePrepOnlyShoppingItems(data.shopping, data.inventory);
+    const { items, dismissed } = reconcileShopping(cleanedShopping, needs, data.dismissedShopping);
 
     // Only write when something actually changed, or this loops forever
     // against its own save.
@@ -1273,7 +1285,7 @@ function addMealsToShoppingList(mealsArr, shoppingList, onShoppingChange, invent
   mealsArr.forEach((m) => {
     (m.ingredients || []).forEach((ing) => {
       const key = ing.trim().toLowerCase();
-      if (key && !existingNames.has(key) && !stockedNames.has(key)) {
+      if (key && !existingNames.has(key) && !stockedNames.has(key) && !isPrepOnlyLowStock(ing, inventory)) {
         existingNames.add(key);
         newItems.push({ id: uid(), name: ing.trim(), checked: false });
       }
