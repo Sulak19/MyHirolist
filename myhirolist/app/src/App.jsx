@@ -1580,9 +1580,17 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
       </div>
 
       {selected.size > 0 && (
-        <button style={styles.addSpendBtn} onClick={addSelectedToLists}>
-          <ShoppingCart size={14} /> Add {selected.size} meal{selected.size === 1 ? "" : "s"} to shopping & prep lists
-        </button>
+        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+          <button style={styles.addSpendBtn} onClick={addSelectedToLists}>
+            <ShoppingCart size={14} /> Add {selected.size} meal{selected.size === 1 ? "" : "s"} to shopping & prep lists
+          </button>
+          <button
+            style={{ ...styles.linkBtnSmall, color: C.teal }}
+            onClick={() => setSelected(new Set())}
+          >
+            Deselect all
+          </button>
+        </div>
       )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
