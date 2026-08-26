@@ -634,6 +634,15 @@ export default function HomeBase() {
                 dogTreatments: { ...current.dogTreatments, history: [] },
               }))
             }
+            onDeleteHistoryEntry={(entryId) =>
+              setData((current) => ({
+                ...current,
+                dogTreatments: {
+                  ...current.dogTreatments,
+                  history: (current.dogTreatments?.history || []).filter((entry) => entry.id !== entryId),
+                },
+              }))
+            }
           />
         )}
         {(tab === "dogFood" || tab === "dogShopping") && (
@@ -2777,7 +2786,7 @@ function DogTab({ view, dogFood, onChange, dogShoppingList, onDogShoppingChange 
 }
 
 
-function DogTreatmentsTab({ dogs, treatments, onScheduleChange, onRecord, onClearHistory }) {
+function DogTreatmentsTab({ dogs, treatments, onScheduleChange, onRecord, onClearHistory, onDeleteHistoryEntry }) {
   const schedules = treatments?.schedules || [];
   const history = treatments?.history || [];
   const today = treatmentDateKey();
@@ -3049,6 +3058,18 @@ function DogTreatmentsTab({ dogs, treatments, onScheduleChange, onRecord, onClea
                       {entry.product} · {displayDate(entry.givenAt)}
                     </div>
                   </div>
+                  <button
+                    type="button"
+                    aria-label={`Delete ${entry.product} treatment record`}
+                    style={styles.xBtn}
+                    onClick={() => {
+                      if (window.confirm("Delete this treatment history entry? The current schedule, due date and stock will stay unchanged.")) {
+                        onDeleteHistoryEntry(entry.id);
+                      }
+                    }}
+                  >
+                    <X size={14} />
+                  </button>
                 </div>
               ))}
               {history.length === 0 && <Empty text="No dog treatments recorded yet." />}
