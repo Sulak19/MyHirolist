@@ -628,6 +628,12 @@ export default function HomeBase() {
             onRecord={(scheduleId, givenDate) =>
               setData((current) => recordDogTreatment(current, scheduleId, givenDate, uid))
             }
+            onClearHistory={() =>
+              setData((current) => ({
+                ...current,
+                dogTreatments: { ...current.dogTreatments, history: [] },
+              }))
+            }
           />
         )}
         {(tab === "dogFood" || tab === "dogShopping") && (
@@ -2771,7 +2777,7 @@ function DogTab({ view, dogFood, onChange, dogShoppingList, onDogShoppingChange 
 }
 
 
-function DogTreatmentsTab({ dogs, treatments, onScheduleChange, onRecord }) {
+function DogTreatmentsTab({ dogs, treatments, onScheduleChange, onRecord, onClearHistory }) {
   const schedules = treatments?.schedules || [];
   const history = treatments?.history || [];
   const today = treatmentDateKey();
@@ -3047,13 +3053,30 @@ function DogTreatmentsTab({ dogs, treatments, onScheduleChange, onRecord }) {
               ))}
               {history.length === 0 && <Empty text="No dog treatments recorded yet." />}
             </div>
-            {history.length > 3 && (
-              <button
-                style={{ ...styles.linkBtn, marginTop: 12 }}
-                onClick={() => setShowAllHistory((show) => !show)}
-              >
-                {showAllHistory ? "Show recent only" : `View all ${history.length} records`}
-              </button>
+            {history.length > 0 && (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginTop: 12 }}>
+                {history.length > 3 ? (
+                  <button
+                    style={styles.linkBtn}
+                    onClick={() => setShowAllHistory((show) => !show)}
+                  >
+                    {showAllHistory ? "Show recent only" : `View all ${history.length} records`}
+                  </button>
+                ) : (
+                  <span />
+                )}
+                <button
+                  style={styles.linkBtnSmall}
+                  onClick={() => {
+                    if (window.confirm("Clear all dog treatment history? Products, schedules, due dates and stock will stay unchanged.")) {
+                      onClearHistory();
+                      setShowAllHistory(false);
+                    }
+                  }}
+                >
+                  Clear history
+                </button>
+              </div>
             )}
           </div>
         )}
