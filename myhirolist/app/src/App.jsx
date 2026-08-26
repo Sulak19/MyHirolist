@@ -2772,12 +2772,16 @@ function DogTab({ view, dogFood, onChange, dogShoppingList, onDogShoppingChange 
 
 
 function DogTreatmentsTab({ dogs, treatments, onScheduleChange, onRecord }) {
-  const [recordDates, setRecordDates] = useState({});
-  const today = treatmentDateKey();
   const schedules = treatments?.schedules || [];
   const history = treatments?.history || [];
+  const today = treatmentDateKey();
   const dogNames = new Map(dogs.map((dog) => [dog.id, dog.name]));
+  const [openKey, setOpenKey] = useState(null);
+  const [recordDates, setRecordDates] = useState({});
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [showAllHistory, setShowAllHistory] = useState(false);
 
+  const keyFor = (dogId, category) => `${category}::${dogId}`;
   const scheduleFor = (dogId, category) =>
     schedules.find((schedule) => schedule.dogId === dogId && schedule.category === category) || {
       id: null,
@@ -2795,139 +2799,264 @@ function DogTreatmentsTab({ dogs, treatments, onScheduleChange, onRecord }) {
   const displayDate = (dateKey) =>
     dateKey ? new Date(`${dateKey}T00:00:00`).toLocaleDateString() : "Not recorded";
 
+  useEffect(() => {
+    if (openKey) return;
+    const firstDue = schedules.find((schedule) => {
+      const nextDue = nextTreatmentDue(schedule);
+      return schedule.product?.trim() && nextDue && nextDue <= today;
+    });
+    if (firstDue) setOpenKey(keyFor(firstDue.dogId, firstDue.category));
+  }, [openKey, schedules, today]);
+
+  const visibleHistory = showAllHistory ? history : history.slice(0, 3);
+
   return (
     <div>
       <SectionTitle>Dog treatments</SectionTitle>
       <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 14, lineHeight: 1.5 }}>
-        Track heartworm, intestinal-worm and flea/tick treatments separately. Set the product and interval for each dog; due treatments appear on Today.
+        Treatments are grouped by type so both dogs are easy to compare. Tap a dog to edit its product, interval, stock or treatment date.
       </div>
 
-      {dogs.map((dog) => (
-        <div key={dog.id} style={{ marginBottom: 24 }}>
-          <div style={{ ...styles.cardLabel, color: C.sage, marginBottom: 8 }}>{dog.name}</div>
-          {DOG_TREATMENT_CATEGORIES.map((category) => {
+      {DOG_TREATMENT_CATEGORIES.map((category) => (
+        <div key={category} style={{ ...styles.card, padding: 0, overflow: "hidden" }}>
+          <div
+            style={{
+              padding: "12px 14px",
+              background: C.inset,
+              fontFamily: "'Zilla Slab', serif",
+              fontWeight: 700,
+              fontSize: 16,
+            }}
+          >
+            {category}
+          </div>
+
+          {dogs.map((dog, dogIndex) => {
             const schedule = scheduleFor(dog.id, category);
             const nextDue = nextTreatmentDue(schedule);
-            const due = nextDue && nextDue <= today;
+            const due = Boolean(schedule.product?.trim() && nextDue && nextDue <= today);
+            const rowKey = keyFor(dog.id, category);
+            const open = openKey === rowKey;
             const recordDate = schedule.id ? recordDates[schedule.id] || today : today;
             const canRecord = Boolean(schedule.id && schedule.product.trim() && Number(schedule.frequencyValue) > 0);
+            const stockSummary =
+              schedule.trackStock === false
+                ? "Stock not tracked"
+                : `${Number(schedule.stockOnHand || 0)} dose${Number(schedule.stockOnHand || 0) === 1 ? "" : "s"} left`;
 
             return (
-              <div key={category} style={{ ...styles.card, borderColor: due ? C.rust : C.line }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                  <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 16 }}>{category}</div>
-                  {due && <span style={{ fontSize: 11, color: C.rust, fontWeight: 700 }}>DUE</span>}
-                </div>
-
-                <Field label="Product used" style={{ marginTop: 12 }}>
-                  <input
-                    style={{ ...styles.input, width: "100%" }}
-                    value={schedule.product}
-                    placeholder="Product name"
-                    onChange={(e) => onScheduleChange(dog.id, category, { product: e.target.value })}
-                  />
-                </Field>
-
-                <div style={{ display: "flex", gap: 10, marginTop: 12, alignItems: "flex-end" }}>
-                  <Field label="Repeat every" style={{ flex: 1 }}>
-                    <input
-                      type="number"
-                      min="1"
-                      step="1"
-                      style={{ ...styles.input, width: "100%" }}
-                      value={schedule.frequencyValue || ""}
-                      placeholder="Number"
-                      onChange={(e) => onScheduleChange(dog.id, category, { frequencyValue: Math.max(0, Number(e.target.value) || 0) })}
-                    />
-                  </Field>
-                  <select
-                    aria-label="Treatment frequency unit"
-                    style={styles.select}
-                    value={schedule.frequencyUnit}
-                    onChange={(e) => onScheduleChange(dog.id, category, { frequencyUnit: e.target.value })}
+              <div
+                key={dog.id}
+                style={{
+                  borderTop: dogIndex === 0 ? "none" : `1px solid ${C.line}`,
+                  background: due ? C.rustWash : C.card,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px" }}>
+                  <button
+                    onClick={() => setOpenKey(open ? null : rowKey)}
+                    aria-expanded={open}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 10,
+                      flex: 1,
+                      minWidth: 0,
+                      padding: 0,
+                      border: "none",
+                      background: "none",
+                      cursor: "pointer",
+                      textAlign: "left",
+                      color: C.ink,
+                    }}
                   >
-                    <option value="days">Days</option>
-                    <option value="weeks">Weeks</option>
-                    <option value="months">Months</option>
-                    <option value="years">Years</option>
-                  </select>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 15 }}>{dog.name}</span>
+                        {due && <span style={{ fontSize: 10.5, color: C.rust, fontWeight: 700 }}>DUE</span>}
+                      </div>
+                      <div style={{ fontSize: 11.5, color: due ? C.rust : C.inkSoft, marginTop: 3, lineHeight: 1.4 }}>
+                        {schedule.product?.trim() || "Set product"}
+                        {nextDue && <> · next {displayDate(nextDue)}</>}
+                        {schedule.product?.trim() && <> · {stockSummary}</>}
+                      </div>
+                    </div>
+                    <ChevronDown
+                      size={16}
+                      color={C.inkFaint}
+                      style={{ transform: open ? "rotate(180deg)" : "none", flexShrink: 0 }}
+                    />
+                  </button>
+
+                  {due && (
+                    <button
+                      style={{ ...styles.putAwayBtn, color: C.rust, borderColor: C.rust, flexShrink: 0 }}
+                      onClick={() => onRecord(schedule.id, today)}
+                    >
+                      Record today
+                    </button>
+                  )}
                 </div>
 
-                <div style={{ ...styles.shopMeta, marginTop: 12 }}>
-                  <span>Last given: {displayDate(schedule.lastGiven)}</span>
-                  <span>·</span>
-                  <span style={due ? { color: C.rust, fontWeight: 700 } : undefined}>
-                    Next due: {nextDue ? displayDate(nextDue) : "Set product, interval and first treatment"}
-                  </span>
-                </div>
-
-                <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14, fontSize: 12.5, color: C.inkSoft }}>
-                  <input
-                    type="checkbox"
-                    checked={schedule.trackStock !== false}
-                    onChange={(e) => onScheduleChange(dog.id, category, { trackStock: e.target.checked })}
-                  />
-                  Track doses kept at home
-                </label>
-
-                {schedule.trackStock !== false && (
-                  <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginTop: 12 }}>
-                    <Field label="Doses left">
-                      <NumberStepper
-                        value={Number(schedule.stockOnHand || 0)}
-                        onChange={(value) => onScheduleChange(dog.id, category, { stockOnHand: Math.max(0, value) })}
+                {open && (
+                  <div style={{ borderTop: `1px solid ${C.line}`, padding: "12px 14px 14px" }}>
+                    <Field label="Product used">
+                      <input
+                        style={{ ...styles.input, width: "100%" }}
+                        value={schedule.product}
+                        placeholder="Product name"
+                        onChange={(e) => onScheduleChange(dog.id, category, { product: e.target.value })}
                       />
                     </Field>
-                    <Field label="Reorder at">
-                      <NumberStepper
-                        value={Number(schedule.reorderAt || 0)}
-                        onChange={(value) => onScheduleChange(dog.id, category, { reorderAt: Math.max(0, value) })}
+
+                    <div style={{ display: "flex", gap: 10, marginTop: 12, alignItems: "flex-end" }}>
+                      <Field label="Repeat every" style={{ flex: 1 }}>
+                        <input
+                          type="number"
+                          min="1"
+                          step="1"
+                          style={{ ...styles.input, width: "100%" }}
+                          value={schedule.frequencyValue || ""}
+                          placeholder="Number"
+                          onChange={(e) =>
+                            onScheduleChange(dog.id, category, {
+                              frequencyValue: Math.max(0, Number(e.target.value) || 0),
+                            })
+                          }
+                        />
+                      </Field>
+                      <select
+                        aria-label="Treatment frequency unit"
+                        style={styles.select}
+                        value={schedule.frequencyUnit}
+                        onChange={(e) => onScheduleChange(dog.id, category, { frequencyUnit: e.target.value })}
+                      >
+                        <option value="days">Days</option>
+                        <option value="weeks">Weeks</option>
+                        <option value="months">Months</option>
+                        <option value="years">Years</option>
+                      </select>
+                    </div>
+
+                    <div style={{ ...styles.shopMeta, marginTop: 12 }}>
+                      <span>Last given: {displayDate(schedule.lastGiven)}</span>
+                      <span>·</span>
+                      <span style={due ? { color: C.rust, fontWeight: 700 } : undefined}>
+                        Next due: {nextDue ? displayDate(nextDue) : "Record the first treatment"}
+                      </span>
+                    </div>
+
+                    <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14, fontSize: 12.5, color: C.inkSoft }}>
+                      <input
+                        type="checkbox"
+                        checked={schedule.trackStock !== false}
+                        onChange={(e) => onScheduleChange(dog.id, category, { trackStock: e.target.checked })}
                       />
-                    </Field>
+                      Track doses kept at home
+                    </label>
+
+                    {schedule.trackStock !== false && (
+                      <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginTop: 12 }}>
+                        <Field label="Doses left">
+                          <NumberStepper
+                            value={Number(schedule.stockOnHand || 0)}
+                            onChange={(value) =>
+                              onScheduleChange(dog.id, category, { stockOnHand: Math.max(0, value) })
+                            }
+                          />
+                        </Field>
+                        <Field label="Reorder at">
+                          <NumberStepper
+                            value={Number(schedule.reorderAt || 0)}
+                            onChange={(value) =>
+                              onScheduleChange(dog.id, category, { reorderAt: Math.max(0, value) })
+                            }
+                          />
+                        </Field>
+                      </div>
+                    )}
+
+                    <div style={{ display: "flex", gap: 8, marginTop: 14, alignItems: "center", flexWrap: "wrap" }}>
+                      <input
+                        type="date"
+                        aria-label={`${dog.name} ${category} treatment date`}
+                        style={{ ...styles.input, flex: "1 1 150px" }}
+                        value={recordDate}
+                        onChange={(e) =>
+                          schedule.id && setRecordDates((current) => ({ ...current, [schedule.id]: e.target.value }))
+                        }
+                      />
+                      <button
+                        style={{ ...styles.addSpendBtn, marginTop: 0, opacity: canRecord ? 1 : 0.45 }}
+                        disabled={!canRecord}
+                        onClick={() => onRecord(schedule.id, recordDate)}
+                      >
+                        <Check size={14} /> Record treatment
+                      </button>
+                    </div>
                   </div>
                 )}
-
-                <div style={{ display: "flex", gap: 8, marginTop: 14, alignItems: "center", flexWrap: "wrap" }}>
-                  <input
-                    type="date"
-                    aria-label={`${dog.name} ${category} treatment date`}
-                    style={{ ...styles.input, flex: "1 1 150px" }}
-                    value={recordDate}
-                    onChange={(e) =>
-                      schedule.id && setRecordDates((current) => ({ ...current, [schedule.id]: e.target.value }))
-                    }
-                  />
-                  <button
-                    style={{ ...styles.addSpendBtn, marginTop: 0, opacity: canRecord ? 1 : 0.45 }}
-                    disabled={!canRecord}
-                    onClick={() => onRecord(schedule.id, recordDate)}
-                  >
-                    <Check size={14} /> Record treatment
-                  </button>
-                </div>
               </div>
             );
           })}
         </div>
       ))}
 
-      <div style={{ marginTop: 26 }}>
-        <SectionTitle>Treatment history</SectionTitle>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {history.slice(0, 30).map((entry) => (
-            <div key={entry.id} style={styles.row}>
-              <div>
-                <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 14.5 }}>
-                  {dogNames.get(entry.dogId) || "Dog"} · {entry.category}
+      <div style={{ ...styles.card, padding: 0, overflow: "hidden", marginTop: 18 }}>
+        <button
+          onClick={() => setHistoryOpen((open) => !open)}
+          aria-expanded={historyOpen}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            width: "100%",
+            padding: "12px 14px",
+            border: "none",
+            background: C.inset,
+            color: C.ink,
+            cursor: "pointer",
+            textAlign: "left",
+          }}
+        >
+          <span style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 700, fontSize: 16 }}>
+            Treatment history {history.length > 0 ? `(${history.length})` : ""}
+          </span>
+          <ChevronDown
+            size={16}
+            color={C.inkFaint}
+            style={{ transform: historyOpen ? "rotate(180deg)" : "none" }}
+          />
+        </button>
+
+        {historyOpen && (
+          <div style={{ padding: "10px 14px 14px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {visibleHistory.map((entry) => (
+                <div key={entry.id} style={styles.row}>
+                  <div>
+                    <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 14.5 }}>
+                      {dogNames.get(entry.dogId) || "Dog"} · {entry.category}
+                    </div>
+                    <div style={{ fontSize: 12, color: C.inkSoft, marginTop: 2 }}>
+                      {entry.product} · {displayDate(entry.givenAt)}
+                    </div>
+                  </div>
                 </div>
-                <div style={{ fontSize: 12, color: C.inkSoft, marginTop: 2 }}>
-                  {entry.product} · {displayDate(entry.givenAt)}
-                </div>
-              </div>
+              ))}
+              {history.length === 0 && <Empty text="No dog treatments recorded yet." />}
             </div>
-          ))}
-          {history.length === 0 && <Empty text="No dog treatments recorded yet." />}
-        </div>
+            {history.length > 3 && (
+              <button
+                style={{ ...styles.linkBtn, marginTop: 12 }}
+                onClick={() => setShowAllHistory((show) => !show)}
+              >
+                {showAllHistory ? "Show recent only" : `View all ${history.length} records`}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
