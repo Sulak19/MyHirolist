@@ -1,3 +1,9 @@
+## 1.0.18
+
+Tidy meal selection and cleaning UI (#5)
+
+Add a one-tap deselect-all meals action and remove the cleaning-equipment summary line while preserving stored household data.
+
 ## 1.0.17
 
 Split Dogs and House into focused tabs (#4)
