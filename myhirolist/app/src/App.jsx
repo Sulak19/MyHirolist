@@ -2790,7 +2790,6 @@ function DogTreatmentsTab({ dogs, treatments, onScheduleChange, onRecord, onClea
   const schedules = treatments?.schedules || [];
   const history = treatments?.history || [];
   const today = treatmentDateKey();
-  const dogNames = new Map(dogs.map((dog) => [dog.id, dog.name]));
   const [openKey, setOpenKey] = useState(null);
   const [recordDates, setRecordDates] = useState({});
   const [openHistoryDogId, setOpenHistoryDogId] = useState(null);
