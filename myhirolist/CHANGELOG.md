@@ -1,3 +1,9 @@
+## 1.0.20
+
+Compact the dog treatments tab (#7)
+
+Group both dogs beneath each treatment type using compact expandable rows while preserving treatment, Today, stock, and shopping behaviour.
+
 ## 1.0.19
 
 Track dog treatments from Today (#6)
