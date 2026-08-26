@@ -1,3 +1,9 @@
+## 1.0.21
+
+Group and manage dog treatment history (#8)
+
+Separate treatment history by dog and add confirmation-protected individual and full-history deletion controls.
+
 ## 1.0.20
 
 Compact the dog treatments tab (#7)
