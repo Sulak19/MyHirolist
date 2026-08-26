@@ -61,6 +61,7 @@ function defaultSchedule(dogId, category, idFactory) {
     frequencyValue: 0,
     frequencyUnit: "months",
     lastGiven: null,
+    trackStock: true,
     stockOnHand: 0,
     reorderAt: 1,
   };
@@ -72,7 +73,7 @@ function syncTreatmentShopping(list, schedule, idFactory) {
     (item) => item.source === "dog-treatment" && item.scheduleId === schedule.id && !item.checked
   );
   const product = schedule.product?.trim();
-  const low = product && Number(schedule.stockOnHand || 0) <= Number(schedule.reorderAt || 0);
+  const low = schedule.trackStock !== false && product && Number(schedule.stockOnHand || 0) <= Number(schedule.reorderAt || 0);
 
   if (!low) return openIndex < 0 ? current : current.filter((_, index) => index !== openIndex);
 
@@ -114,7 +115,7 @@ export function recordDogTreatment(data, scheduleId, givenDate = treatmentDateKe
   const updated = {
     ...schedule,
     lastGiven: givenDate,
-    stockOnHand: Math.max(0, Number(schedule.stockOnHand || 0) - 1),
+    stockOnHand: schedule.trackStock === false ? Number(schedule.stockOnHand || 0) : Math.max(0, Number(schedule.stockOnHand || 0) - 1),
   };
   const historyEntry = {
     id: idFactory(),
