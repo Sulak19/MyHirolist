@@ -583,8 +583,6 @@ export default function HomeBase() {
             view="cleaning"
             list={data.cleaning}
             onChange={(v) => update("cleaning", v)}
-            equipment={data.cleaningEquipment || ""}
-            onEquipmentChange={(v) => update("cleaningEquipment", v)}
             oddJobs={data.oddJobs}
             onOddJobsChange={(v) => update("oddJobs", v)}
           />
@@ -594,8 +592,6 @@ export default function HomeBase() {
             view="oddJobs"
             list={data.cleaning}
             onChange={(v) => update("cleaning", v)}
-            equipment={data.cleaningEquipment || ""}
-            onEquipmentChange={(v) => update("cleaningEquipment", v)}
             oddJobs={data.oddJobs}
             onOddJobsChange={(v) => update("oddJobs", v)}
           />
@@ -1580,9 +1576,17 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
       </div>
 
       {selected.size > 0 && (
-        <button style={styles.addSpendBtn} onClick={addSelectedToLists}>
-          <ShoppingCart size={14} /> Add {selected.size} meal{selected.size === 1 ? "" : "s"} to shopping & prep lists
-        </button>
+        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+          <button style={styles.addSpendBtn} onClick={addSelectedToLists}>
+            <ShoppingCart size={14} /> Add {selected.size} meal{selected.size === 1 ? "" : "s"} to shopping & prep lists
+          </button>
+          <button
+            style={{ ...styles.linkBtnSmall, color: C.teal }}
+            onClick={() => setSelected(new Set())}
+          >
+            Deselect all
+          </button>
+        </div>
       )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
@@ -2123,7 +2127,7 @@ function daysOverdue(task) {
   return over >= 0 ? over : null;
 }
 
-function CleaningTab({ view, list, onChange, equipment, onEquipmentChange, oddJobs, onOddJobsChange }) {
+function CleaningTab({ view, list, onChange, oddJobs, onOddJobsChange }) {
   const [name, setName] = useState("");
   const [freq, setFreq] = useState("Weekly");
 
@@ -2162,12 +2166,6 @@ function CleaningTab({ view, list, onChange, equipment, onEquipmentChange, oddJo
       {view === "cleaning" && (
         <>
           <SectionTitle>Cleaning routine</SectionTitle>
-      <input
-        style={{ ...styles.input, width: "100%", marginBottom: 12, fontSize: 12.5, color: C.inkSoft }}
-        value={equipment}
-        onChange={(e) => onEquipmentChange(e.target.value)}
-        placeholder="Equipment notes (e.g. robot vacuum, washer/dryer combo)"
-      />
       <AddRow>
         <input style={styles.input} placeholder="Task" value={name} onChange={(e) => setName(e.target.value)} />
         <select style={styles.select} value={freq} onChange={(e) => setFreq(e.target.value)}>
