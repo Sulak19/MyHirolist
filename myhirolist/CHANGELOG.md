@@ -1,3 +1,9 @@
+## 1.0.23
+
+Share dog treatment doses and combine shopping quantities (#10)
+
+Record both dogs when they use the same product for the same treatment category, maintain separate history and stock changes, and combine matching low-stock shopping entries with a quantity.
+
 ## 1.0.22
 
 Mirror dog treatments and odd jobs to Home Assistant calendar (#9)
