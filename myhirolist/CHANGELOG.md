@@ -1,5 +1,11 @@
 ## 1.0.22
 
+Mirror dog treatments and odd jobs to Home Assistant calendar (#9)
+
+Keep MyHiroList as the source of truth while mirroring dated dog treatments and unfinished odd jobs to the Home Base calendar. Prevent duplicate treatment reminders on Today and release add-on version 1.0.22.
+
+## 1.0.22
+
 Mirror dated dog treatments and odd jobs to Home Assistant
 
 Keep MyHiroList as the source of truth while adding each configured dog
