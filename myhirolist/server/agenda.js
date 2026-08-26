@@ -2,7 +2,7 @@
 // kind. Pure, so the grouping and the "show tomorrow?" rule are testable.
 //
 // The event key the projection stamps into each description (meal:<date>,
-// clean:<taskId>, expiry:<itemId>) is what lets the Home tab know that an
+// clean:<taskId>, expiry:<itemId>, odd-job:<jobId>) is what lets the Home tab know that an
 // event is a chore it can tick off, rather than just a line of text.
 
 import { keyFrom } from "./calendar.js";
@@ -25,6 +25,13 @@ export function classify(event) {
       return { kind: "chore", refId };
     case "expiry":
       return { kind: "expiry", refId };
+    case "odd-job":
+      return { kind: "oddJob", refId };
+    case "dog-treatment":
+      // Treatment cards come directly from MyHiroList data so they retain
+      // their Done action and can update stock/history. Do not show the
+      // calendar mirror as a second, inert copy on Today.
+      return { kind: "hidden", refId };
     default:
       return { kind: "other", refId: null };
   }
@@ -33,7 +40,12 @@ export function classify(event) {
 // Strips the prefixes the projection adds, since the Home tab groups by kind
 // and does not need "Clean:" repeated on every line.
 export function displayName(kind, summary) {
-  const prefixes = { dinner: /^Dinner:\s*/i, chore: /^Clean:\s*/i, expiry: /^Use up:\s*/i };
+  const prefixes = {
+    dinner: /^Dinner:\s*/i,
+    chore: /^Clean:\s*/i,
+    expiry: /^Use up:\s*/i,
+    oddJob: /^Odd job:\s*/i,
+  };
   const pattern = prefixes[kind];
   return pattern ? String(summary ?? "").replace(pattern, "") : String(summary ?? "");
 }
@@ -68,6 +80,7 @@ export function buildAgenda(events, dates) {
     if (!day) continue;
 
     const { kind, refId } = classify(event);
+    if (kind === "hidden") continue;
     const name = displayName(kind, event.summary);
     const entry = {
       name,

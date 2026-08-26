@@ -1,3 +1,12 @@
+## 1.0.22
+
+Mirror dated dog treatments and odd jobs to Home Assistant
+
+Keep MyHiroList as the source of truth while adding each configured dog
+treatment and unfinished dated odd job to the Home Base calendar. Overdue
+items remain visible on today until completed, and treatment calendar events
+are not duplicated beside the interactive treatment cards on the Today page.
+
 ## 1.0.21
 
 Group and manage dog treatment history (#8)

@@ -100,6 +100,82 @@ test("inventory without an expiry, or with a broken one, is skipped", () => {
   assert.deepEqual(planEvents(data, NOW), []);
 });
 
+test("an active odd job lands on its due date", () => {
+  const data = { oddJobs: [{ id: "j1", name: "Book car service", dueDate: "2026-08-29", done: false }] };
+  const [event] = planEvents(data, NOW);
+  assert.deepEqual(event, {
+    key: "odd-job:j1",
+    summary: "Odd job: Book car service",
+    date: "2026-08-29",
+  });
+});
+
+test("overdue odd jobs stay on today and completed jobs leave the calendar", () => {
+  const data = {
+    oddJobs: [
+      { id: "late", name: "Fix fence", dueDate: "2026-08-01", done: false },
+      { id: "done", name: "Clean gutters", dueDate: "2026-08-26", done: true },
+      { id: "undated", name: "Paint gate", dueDate: null, done: false },
+    ],
+  };
+  assert.deepEqual(planEvents(data, NOW), [
+    { key: "odd-job:late", summary: "Odd job: Fix fence", date: "2026-08-26" },
+  ]);
+});
+
+test("dog treatments use each schedule's product and next due date", () => {
+  const data = {
+    dogFood: { dogs: [{ id: "d1", name: "Hiro" }] },
+    dogTreatments: {
+      schedules: [{
+        id: "s1",
+        dogId: "d1",
+        category: "Heartworm",
+        product: "ProHeart",
+        frequencyValue: 12,
+        frequencyUnit: "months",
+        lastGiven: "2026-01-31",
+      }],
+    },
+  };
+  assert.deepEqual(planEvents(data, NOW), [{
+    key: "dog-treatment:s1",
+    summary: "Dog treatment: Hiro · Heartworm · ProHeart",
+    date: "2027-01-31",
+  }]);
+});
+
+test("overdue dog treatments stay on today until recorded", () => {
+  const data = {
+    dogFood: { dogs: [{ id: "d1", name: "Hiro" }] },
+    dogTreatments: {
+      schedules: [{
+        id: "s1",
+        dogId: "d1",
+        category: "Flea & tick",
+        product: "Treatment",
+        frequencyValue: 7,
+        frequencyUnit: "days",
+        lastGiven: "2026-08-01",
+      }],
+    },
+  };
+  assert.equal(planEvents(data, NOW)[0].date, "2026-08-26");
+});
+
+test("incomplete treatment schedules do not create calendar events", () => {
+  const data = {
+    dogTreatments: {
+      schedules: [
+        { id: "no-product", lastGiven: "2026-08-01", frequencyValue: 7, frequencyUnit: "days" },
+        { id: "no-date", product: "Treatment", frequencyValue: 7, frequencyUnit: "days" },
+        { id: "no-frequency", product: "Treatment", lastGiven: "2026-08-01", frequencyValue: 0 },
+      ],
+    },
+  };
+  assert.deepEqual(planEvents(data, NOW), []);
+});
+
 test("empty or malformed data plans nothing rather than throwing", () => {
   for (const input of [null, undefined, {}, { cleaning: "nope", inventory: 5 }]) {
     assert.deepEqual(planEvents(input, NOW), []);
