@@ -2760,6 +2760,9 @@ function DogTab({ view, dogFood, onChange, dogShoppingList, onDogShoppingChange 
                 </span>
                 <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 14, textDecoration: i.checked ? "line-through" : "none" }}>
                   {i.name}
+                  {Number(i.quantity || 1) > 1 && (
+                    <span style={{ color: C.teal, fontWeight: 700 }}> ×{Number(i.quantity)}</span>
+                  )}
                   {i.reason && (
                     <span style={{ display: "block", fontSize: 11, color: C.inkSoft, marginTop: 2, textDecoration: "none" }}>
                       {i.reason}
@@ -2850,6 +2853,14 @@ function DogTreatmentsTab({ dogs, treatments, onScheduleChange, onRecord, onClea
             const open = openKey === rowKey;
             const recordDate = schedule.id ? recordDates[schedule.id] || today : today;
             const canRecord = Boolean(schedule.id && schedule.product.trim() && Number(schedule.frequencyValue) > 0);
+            const sharedDoseCount = schedule.product.trim()
+              ? schedules.filter(
+                  (other) =>
+                    other.category === category &&
+                    other.product?.trim().replace(/\s+/g, " ").toLowerCase() ===
+                      schedule.product.trim().replace(/\s+/g, " ").toLowerCase()
+                ).length
+              : 1;
             const stockSummary =
               schedule.trackStock === false
                 ? "Stock not tracked"
@@ -2905,7 +2916,7 @@ function DogTreatmentsTab({ dogs, treatments, onScheduleChange, onRecord, onClea
                       style={{ ...styles.putAwayBtn, color: C.rust, borderColor: C.rust, flexShrink: 0 }}
                       onClick={() => onRecord(schedule.id, today)}
                     >
-                      Record today
+                      {sharedDoseCount > 1 ? "Record both today" : "Record today"}
                     </button>
                   )}
                 </div>
@@ -3003,7 +3014,7 @@ function DogTreatmentsTab({ dogs, treatments, onScheduleChange, onRecord, onClea
                         disabled={!canRecord}
                         onClick={() => onRecord(schedule.id, recordDate)}
                       >
-                        <Check size={14} /> Record treatment
+                        <Check size={14} /> {sharedDoseCount > 1 ? "Record for both dogs" : "Record treatment"}
                       </button>
                     </div>
                   </div>

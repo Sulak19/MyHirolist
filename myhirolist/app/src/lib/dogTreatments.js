@@ -67,26 +67,52 @@ function defaultSchedule(dogId, category, idFactory) {
   };
 }
 
-function syncTreatmentShopping(list, schedule, idFactory) {
+function productKey(value) {
+  return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function syncTreatmentShopping(list, schedules, idFactory) {
   const current = list || [];
-  const openIndex = current.findIndex(
-    (item) => item.source === "dog-treatment" && item.scheduleId === schedule.id && !item.checked
-  );
-  const product = schedule.product?.trim();
-  const low = schedule.trackStock !== false && product && Number(schedule.stockOnHand || 0) <= Number(schedule.reorderAt || 0);
+  const openTreatmentItems = current.filter((item) => item.source === "dog-treatment" && !item.checked);
+  const preserved = current.filter((item) => item.source !== "dog-treatment" || item.checked);
+  const existingByProduct = new Map();
+  for (const item of openTreatmentItems) {
+    const key = productKey(item.name);
+    if (key && !existingByProduct.has(key)) existingByProduct.set(key, item);
+  }
 
-  if (!low) return openIndex < 0 ? current : current.filter((_, index) => index !== openIndex);
+  const lowByProduct = new Map();
+  for (const schedule of schedules || []) {
+    const product = schedule?.product?.trim();
+    const low =
+      schedule?.trackStock !== false &&
+      product &&
+      Number(schedule.stockOnHand || 0) <= Number(schedule.reorderAt || 0);
+    if (!low) continue;
 
-  const item = {
-    id: openIndex >= 0 ? current[openIndex].id : idFactory(),
-    name: product,
-    checked: false,
-    source: "dog-treatment",
-    scheduleId: schedule.id,
-    reason: `${schedule.category} · low stock`,
-  };
-  if (openIndex < 0) return [item, ...current];
-  return current.map((existing, index) => (index === openIndex ? { ...existing, ...item } : existing));
+    const key = productKey(product);
+    const group = lowByProduct.get(key) || { name: product, schedules: [] };
+    group.schedules.push(schedule);
+    lowByProduct.set(key, group);
+  }
+
+  const generated = [];
+  for (const [key, group] of lowByProduct) {
+    const existing = existingByProduct.get(key);
+    const categories = [...new Set(group.schedules.map((schedule) => schedule.category).filter(Boolean))];
+    generated.push({
+      id: existing?.id || idFactory(),
+      name: group.name,
+      quantity: group.schedules.length,
+      checked: false,
+      source: "dog-treatment",
+      scheduleId: group.schedules[0].id,
+      scheduleIds: group.schedules.map((schedule) => schedule.id),
+      reason: `${categories.join(" + ") || "Treatment"} · low stock`,
+    });
+  }
+
+  return [...generated, ...preserved];
 }
 
 export function updateDogTreatmentSchedule(data, dogId, category, patch, idFactory) {
@@ -103,7 +129,7 @@ export function updateDogTreatmentSchedule(data, dogId, category, patch, idFacto
   return {
     ...data,
     dogTreatments: { ...treatments, schedules: nextSchedules },
-    dogShoppingList: syncTreatmentShopping(data.dogShoppingList, updated, idFactory),
+    dogShoppingList: syncTreatmentShopping(data.dogShoppingList, nextSchedules, idFactory),
   };
 }
 
@@ -112,27 +138,39 @@ export function recordDogTreatment(data, scheduleId, givenDate = treatmentDateKe
   const schedule = (treatments.schedules || []).find((item) => item.id === scheduleId);
   if (!schedule?.product?.trim() || !parseDateKey(givenDate)) return data;
 
-  const updated = {
-    ...schedule,
-    lastGiven: givenDate,
-    stockOnHand: schedule.trackStock === false ? Number(schedule.stockOnHand || 0) : Math.max(0, Number(schedule.stockOnHand || 0) - 1),
-  };
-  const historyEntry = {
+  const key = productKey(schedule.product);
+  const matching = treatments.schedules.filter(
+    (item) => item.category === schedule.category && productKey(item.product) === key
+  );
+  const matchingIds = new Set(matching.map((item) => item.id));
+  const nextSchedules = treatments.schedules.map((item) =>
+    matchingIds.has(item.id)
+      ? {
+          ...item,
+          lastGiven: givenDate,
+          stockOnHand:
+            item.trackStock === false
+              ? Number(item.stockOnHand || 0)
+              : Math.max(0, Number(item.stockOnHand || 0) - 1),
+        }
+      : item
+  );
+  const historyEntries = matching.map((item) => ({
     id: idFactory(),
-    scheduleId,
-    dogId: schedule.dogId,
-    category: schedule.category,
-    product: schedule.product.trim(),
+    scheduleId: item.id,
+    dogId: item.dogId,
+    category: item.category,
+    product: item.product.trim(),
     givenAt: givenDate,
-  };
+  }));
 
   return {
     ...data,
     dogTreatments: {
       ...treatments,
-      schedules: treatments.schedules.map((item) => (item.id === scheduleId ? updated : item)),
-      history: [historyEntry, ...(treatments.history || [])],
+      schedules: nextSchedules,
+      history: [...historyEntries, ...(treatments.history || [])],
     },
-    dogShoppingList: syncTreatmentShopping(data.dogShoppingList, updated, idFactory),
+    dogShoppingList: syncTreatmentShopping(data.dogShoppingList, nextSchedules, idFactory),
   };
 }
