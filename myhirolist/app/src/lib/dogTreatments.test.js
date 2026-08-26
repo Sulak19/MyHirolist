@@ -70,3 +70,22 @@ test("low-stock treatment shopping entries do not duplicate and clear after rest
   data = updateDogTreatmentSchedule(data, "dog-1", "Flea & tick", { stockOnHand: 4 }, id);
   assert.equal(data.dogShoppingList.length, 0);
 });
+
+test("vet-administered treatments can skip stock and shopping", () => {
+  let data = {
+    dogTreatments: { schedules: [], history: [] },
+    dogShoppingList: [],
+  };
+  data = updateDogTreatmentSchedule(
+    data,
+    "dog-1",
+    "Heartworm",
+    { product: "Annual injection", frequencyValue: 1, frequencyUnit: "years", trackStock: false },
+    id
+  );
+  const schedule = data.dogTreatments.schedules[0];
+  data = recordDogTreatment(data, schedule.id, "2026-08-26", id);
+
+  assert.equal(data.dogTreatments.schedules[0].lastGiven, "2026-08-26");
+  assert.equal(data.dogShoppingList.length, 0);
+});
