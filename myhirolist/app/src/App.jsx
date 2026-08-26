@@ -628,6 +628,21 @@ export default function HomeBase() {
             onRecord={(scheduleId, givenDate) =>
               setData((current) => recordDogTreatment(current, scheduleId, givenDate, uid))
             }
+            onClearHistory={() =>
+              setData((current) => ({
+                ...current,
+                dogTreatments: { ...current.dogTreatments, history: [] },
+              }))
+            }
+            onDeleteHistoryEntry={(entryId) =>
+              setData((current) => ({
+                ...current,
+                dogTreatments: {
+                  ...current.dogTreatments,
+                  history: (current.dogTreatments?.history || []).filter((entry) => entry.id !== entryId),
+                },
+              }))
+            }
           />
         )}
         {(tab === "dogFood" || tab === "dogShopping") && (
@@ -2771,15 +2786,13 @@ function DogTab({ view, dogFood, onChange, dogShoppingList, onDogShoppingChange 
 }
 
 
-function DogTreatmentsTab({ dogs, treatments, onScheduleChange, onRecord }) {
+function DogTreatmentsTab({ dogs, treatments, onScheduleChange, onRecord, onClearHistory, onDeleteHistoryEntry }) {
   const schedules = treatments?.schedules || [];
   const history = treatments?.history || [];
   const today = treatmentDateKey();
-  const dogNames = new Map(dogs.map((dog) => [dog.id, dog.name]));
   const [openKey, setOpenKey] = useState(null);
   const [recordDates, setRecordDates] = useState({});
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [showAllHistory, setShowAllHistory] = useState(false);
+  const [openHistoryDogId, setOpenHistoryDogId] = useState(null);
 
   const keyFor = (dogId, category) => `${category}::${dogId}`;
   const scheduleFor = (dogId, category) =>
@@ -2807,8 +2820,6 @@ function DogTreatmentsTab({ dogs, treatments, onScheduleChange, onRecord }) {
     });
     if (firstDue) setOpenKey(keyFor(firstDue.dogId, firstDue.category));
   }, [openKey, schedules, today]);
-
-  const visibleHistory = showAllHistory ? history : history.slice(0, 3);
 
   return (
     <div>
@@ -3004,59 +3015,100 @@ function DogTreatmentsTab({ dogs, treatments, onScheduleChange, onRecord }) {
       ))}
 
       <div style={{ ...styles.card, padding: 0, overflow: "hidden", marginTop: 18 }}>
-        <button
-          onClick={() => setHistoryOpen((open) => !open)}
-          aria-expanded={historyOpen}
+        <div
           style={{
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            width: "100%",
+            gap: 12,
             padding: "12px 14px",
-            border: "none",
             background: C.inset,
-            color: C.ink,
-            cursor: "pointer",
-            textAlign: "left",
           }}
         >
           <span style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 700, fontSize: 16 }}>
             Treatment history {history.length > 0 ? `(${history.length})` : ""}
           </span>
-          <ChevronDown
-            size={16}
-            color={C.inkFaint}
-            style={{ transform: historyOpen ? "rotate(180deg)" : "none" }}
-          />
-        </button>
+          {history.length > 0 && (
+            <button
+              style={styles.linkBtnSmall}
+              onClick={() => {
+                if (window.confirm("Clear all dog treatment history? Products, schedules, due dates and stock will stay unchanged.")) {
+                  onClearHistory();
+                  setOpenHistoryDogId(null);
+                }
+              }}
+            >
+              Clear history
+            </button>
+          )}
+        </div>
 
-        {historyOpen && (
-          <div style={{ padding: "10px 14px 14px" }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {visibleHistory.map((entry) => (
-                <div key={entry.id} style={styles.row}>
-                  <div>
-                    <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 14.5 }}>
-                      {dogNames.get(entry.dogId) || "Dog"} · {entry.category}
-                    </div>
-                    <div style={{ fontSize: 12, color: C.inkSoft, marginTop: 2 }}>
-                      {entry.product} · {displayDate(entry.givenAt)}
-                    </div>
+        {dogs.map((dog, dogIndex) => {
+          const dogHistory = history.filter((entry) => entry.dogId === dog.id);
+          const open = openHistoryDogId === dog.id;
+          return (
+            <div key={dog.id} style={{ borderTop: dogIndex === 0 ? "none" : `1px solid ${C.line}` }}>
+              <button
+                onClick={() => setOpenHistoryDogId(open ? null : dog.id)}
+                aria-expanded={open}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 10,
+                  width: "100%",
+                  padding: "11px 14px",
+                  border: "none",
+                  background: C.card,
+                  color: C.ink,
+                  cursor: "pointer",
+                  textAlign: "left",
+                }}
+              >
+                <span style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 15 }}>
+                  {dog.name} {dogHistory.length > 0 ? `(${dogHistory.length})` : ""}
+                </span>
+                <ChevronDown
+                  size={16}
+                  color={C.inkFaint}
+                  style={{ transform: open ? "rotate(180deg)" : "none" }}
+                />
+              </button>
+
+              {open && (
+                <div style={{ padding: "0 14px 12px" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {dogHistory.map((entry) => (
+                      <div key={entry.id} style={styles.row}>
+                        <div>
+                          <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 14.5 }}>
+                            {entry.category}
+                          </div>
+                          <div style={{ fontSize: 12, color: C.inkSoft, marginTop: 2 }}>
+                            {entry.product} · {displayDate(entry.givenAt)}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          aria-label={`Delete ${entry.product} treatment record`}
+                          style={styles.xBtn}
+                          onClick={() => {
+                            if (window.confirm("Delete this treatment history entry? The current schedule, due date and stock will stay unchanged.")) {
+                              onDeleteHistoryEntry(entry.id);
+                            }
+                          }}
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))}
+                    {dogHistory.length === 0 && <Empty text={`No treatment history for ${dog.name}.`} />}
                   </div>
                 </div>
-              ))}
-              {history.length === 0 && <Empty text="No dog treatments recorded yet." />}
+              )}
             </div>
-            {history.length > 3 && (
-              <button
-                style={{ ...styles.linkBtn, marginTop: 12 }}
-                onClick={() => setShowAllHistory((show) => !show)}
-              >
-                {showAllHistory ? "Show recent only" : `View all ${history.length} records`}
-              </button>
-            )}
-          </div>
-        )}
+          );
+        })}
       </div>
     </div>
   );
