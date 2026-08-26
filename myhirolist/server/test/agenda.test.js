@@ -20,6 +20,8 @@ test("events are classified by the key the projection stamped", () => {
   assert.deepEqual(classify(ev("Dinner: Karaage", "meal:2026-08-26")), { kind: "dinner", refId: "2026-08-26" });
   assert.deepEqual(classify(ev("Clean: Toilet", "clean:t1")), { kind: "chore", refId: "t1" });
   assert.deepEqual(classify(ev("Use up: Milk", "expiry:i1")), { kind: "expiry", refId: "i1" });
+  assert.deepEqual(classify(ev("Odd job: Fix fence", "odd-job:j1")), { kind: "oddJob", refId: "j1" });
+  assert.deepEqual(classify(ev("Dog treatment", "dog-treatment:s1")), { kind: "hidden", refId: "s1" });
   assert.deepEqual(classify(ev("Dentist", null)), { kind: "other", refId: null });
 });
 
@@ -27,7 +29,18 @@ test("display names drop the projection prefixes", () => {
   assert.equal(displayName("chore", "Clean: Toilet"), "Toilet");
   assert.equal(displayName("dinner", "Dinner: Karaage"), "Karaage");
   assert.equal(displayName("expiry", "Use up: Milk"), "Milk");
+  assert.equal(displayName("oddJob", "Odd job: Fix fence"), "Fix fence");
   assert.equal(displayName("other", "Dentist 3pm"), "Dentist 3pm");
+});
+
+test("odd jobs appear once while interactive dog treatment cards are not duplicated", () => {
+  const [day] = buildAgenda([
+    ev("Odd job: Fix fence", "odd-job:j1"),
+    ev("Dog treatment: Hiro · Heartworm · ProHeart", "dog-treatment:s1"),
+  ], [D1]);
+
+  assert.deepEqual(day.other.map((item) => item.name), ["Fix fence"]);
+  assert.equal(day.other[0].refId, "j1");
 });
 
 test("a day is grouped into dinner, chores, expiry and other", () => {

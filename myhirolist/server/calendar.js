@@ -53,6 +53,44 @@ export function keyFrom(description) {
 
 const asArray = (value) => (Array.isArray(value) ? value : []);
 
+function parseDateKey(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value ?? "")) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) return null;
+  return { date, year, month: month - 1, day };
+}
+
+function nextTreatmentDue(schedule) {
+  const parsed = parseDateKey(schedule?.lastGiven);
+  const amount = Math.max(0, Math.round(Number(schedule?.frequencyValue) || 0));
+  if (!parsed || amount <= 0) return null;
+
+  if (schedule.frequencyUnit === "days" || schedule.frequencyUnit === "weeks") {
+    const result = new Date(parsed.date);
+    result.setUTCDate(result.getUTCDate() + amount * (schedule.frequencyUnit === "weeks" ? 7 : 1));
+    return result.toISOString().slice(0, 10);
+  }
+
+  const monthsToAdd = schedule.frequencyUnit === "years" ? amount * 12 : amount;
+  const rawMonth = parsed.month + monthsToAdd;
+  const targetYear = parsed.year + Math.floor(rawMonth / 12);
+  const targetMonth = ((rawMonth % 12) + 12) % 12;
+  const lastDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(targetYear, targetMonth, Math.min(parsed.day, lastDay)))
+    .toISOString()
+    .slice(0, 10);
+}
+
+function todayWhenOverdue(date, nowMs) {
+  const today = toDateKey(nowMs);
+  return date < today ? today : date;
+}
+
 function mealNameFor(data, value) {
   if (!value) return null;
 
@@ -111,6 +149,33 @@ export function planEvents(data, nowMs) {
     const date = nextDue(task, nowMs);
     if (!date || !task?.id) continue;
     events.push({ key: `clean:${task.id}`, summary: `Clean: ${task.name}`, date });
+  }
+
+  // One-off jobs with dates. Completed jobs leave the calendar on the next
+  // sync; overdue jobs stay visible on today until they are completed.
+  for (const job of asArray(data.oddJobs)) {
+    if (!job?.id || job.done || !parseDateKey(job.dueDate)) continue;
+    events.push({
+      key: `odd-job:${job.id}`,
+      summary: `Odd job: ${job.name}`,
+      date: todayWhenOverdue(job.dueDate, nowMs),
+    });
+  }
+
+  // Each dog/treatment combination has its own schedule. The product is part
+  // of the event title, while the stable schedule id keeps edits and recorded
+  // doses tied to one calendar event.
+  const dogNames = new Map(asArray(data.dogFood?.dogs).map((dog) => [dog.id, dog.name]));
+  for (const schedule of asArray(data.dogTreatments?.schedules)) {
+    const product = schedule?.product?.trim();
+    const due = nextTreatmentDue(schedule);
+    if (!schedule?.id || !product || !due) continue;
+    const dogName = dogNames.get(schedule.dogId) || "Dog";
+    events.push({
+      key: `dog-treatment:${schedule.id}`,
+      summary: `Dog treatment: ${dogName} · ${schedule.category} · ${product}`,
+      date: todayWhenOverdue(due, nowMs),
+    });
   }
 
   // Food about to go off.
