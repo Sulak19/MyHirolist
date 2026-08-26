@@ -1,3 +1,9 @@
+## 1.0.19
+
+Track dog treatments from Today (#6)
+
+Add separate dog treatment schedules, Today completion, history, stock tracking, and Dog Shopping integration.
+
 ## 1.0.18
 
 Tidy meal selection and cleaning UI (#5)
