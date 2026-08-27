@@ -3,8 +3,9 @@
 // `weekPlan` is this week's dinners, keyed by weekday name, and has been
 // since the first version of the app. Rather than change its shape - which
 // every read in the app and the server depends on - next week lives
-// alongside it as `nextWeekPlan` with the same shape, and on Monday next week
-// becomes this week.
+// alongside it as `nextWeekPlan` with the same shape. At 7 pm Friday, next
+// week becomes this week so the household can plan the following week over
+// the weekend.
 
 export const EMPTY_WEEK = { Monday: null, Tuesday: null, Wednesday: null, Thursday: null, Friday: null };
 
@@ -46,13 +47,23 @@ export function mondayOf(date = new Date()) {
   return localDateKey(copy);
 }
 
+// The plan switches to the coming Monday at 7 pm Friday, in the device's
+// local time. Saturday and Sunday belong to that same newly promoted plan.
+function activePlanMonday(date) {
+  const monday = mondayOf(date);
+  const weekday = date.getDay();
+  const afterFridayRollover = weekday === 6 || weekday === 0 || (weekday === 5 && date.getHours() >= 19);
+  return afterFridayRollover ? addDays(monday, 7) : monday;
+}
+
 /**
- * Promotes next week's plan into this week's once a new week has begun.
+ * Promotes next week's plan into this week's at 7 pm Friday.
  *
- * `planWeekOf` records which Monday `weekPlan` belongs to. If it is this
- * Monday (or missing on legacy data, which is treated as current), nothing
- * happens. If it is older, next week's plan moves into weekPlan, nextWeekPlan
- * empties, and the stamp moves forward.
+ * `planWeekOf` records which Monday `weekPlan` belongs to. From Friday at
+ * 7 pm through Sunday, the active plan belongs to the coming Monday. If the
+ * stamp is current (or missing on legacy data), nothing happens. If it is
+ * older, next week's plan moves into weekPlan, nextWeekPlan empties, and the
+ * stamp moves forward.
  *
  * Returns the same object when no change is needed, so callers can compare
  * by identity and avoid a pointless save.
@@ -60,7 +71,7 @@ export function mondayOf(date = new Date()) {
 export function rolloverWeeks(data, now = new Date()) {
   if (!data || typeof data !== "object") return data;
 
-  const thisMonday = mondayOf(now);
+  const thisMonday = activePlanMonday(now);
   const stamped = data.planWeekOf;
 
   // Legacy data has no stamp. Treat the existing plan as current and stamp
