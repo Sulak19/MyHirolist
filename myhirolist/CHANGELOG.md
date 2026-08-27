@@ -1,3 +1,9 @@
+## 1.0.25
+
+Merge pull request #12 from Sulak19/codex/friday-plan-rollover
+
+Roll meal plans over Friday at 7 pm
+
 ## 1.0.23
 
 Share dog treatment doses and combine shopping quantities (#10)
