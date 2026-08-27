@@ -1441,6 +1441,7 @@ function addMealsToPrepList(mealsArr, prepList, onPrepChange) {
 
 function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, onPrepChange, inventory, selectedIds, onSelectionChange }) {
   const [name, setName] = useState("");
+  const [ingredients, setIngredientsDraft] = useState("");
   const [tagVals, setTagVals] = useState(new Set(["Misc"]));
   const [url, setUrl] = useState("");
   const [showAddMeal, setShowAddMeal] = useState(false);
@@ -1487,6 +1488,7 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
 
   const resetAddDraft = () => {
     setName("");
+    setIngredientsDraft("");
     setUrl("");
     setTagVals(new Set(["Misc"]));
   };
@@ -1497,7 +1499,16 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
   const add = () => {
     if (!name.trim()) return;
     const tags = tagVals.size > 0 ? [...tagVals] : ["Misc"];
-    onChange([...list, { id: uid(), name: name.trim(), tags, url: url.trim() || undefined, ingredients: [] }]);
+    onChange([
+      ...list,
+      {
+        id: uid(),
+        name: name.trim(),
+        tags,
+        url: url.trim() || undefined,
+        ingredients: ingredients.split(",").map((item) => item.trim()).filter(Boolean),
+      },
+    ]);
     closeAddMeal();
   };
   const remove = (id) => {
@@ -1809,6 +1820,17 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
                   );
                 })}
               </div>
+            </div>
+
+            <div style={{ marginTop: 14 }}>
+              <Field label="Ingredients (comma separated)">
+                <textarea
+                  style={{ ...styles.input, width: "100%", minHeight: 76, resize: "vertical" }}
+                  placeholder="e.g. chicken thighs, onion, garlic"
+                  value={ingredients}
+                  onChange={(e) => setIngredientsDraft(e.target.value)}
+                />
+              </Field>
             </div>
 
             <div style={{ marginTop: 14 }}>
