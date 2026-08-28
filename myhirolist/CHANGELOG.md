@@ -1,3 +1,9 @@
+## 1.0.28
+
+Merge PR #15: Streamline weekend prep and track staples
+
+Streamline weekend prep and track staples
+
 ## 1.0.27
 
 Merge pull request #14 from Sulak19/codex/selected-meal-shopping-metadata
