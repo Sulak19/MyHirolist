@@ -47,6 +47,7 @@ import {
 } from "./lib/dogTreatments.js";
 import { getToday } from "./lib/api.js";
 import { C, useTheme } from "./lib/theme.js";
+import { moveInventoryItem } from "./lib/inventory.js";
 
 /* ---------------------------------------------------------
    Home Base — a household dashboard
@@ -2511,9 +2512,6 @@ function DogTab({ view, dogFood, onChange, dogShoppingList, onDogShoppingChange 
   const [scanError, setScanError] = useState("");
   const [scanResults, setScanResults] = useState(null); // array of { id, name, checked }
 
-  const moveTo = (id, location) =>
-    onChange(list.map((i) => (i.id === id ? { ...i, location } : i)));
-
   const triggerScan = () => fileInputRef.current?.click();
 
   const handlePhoto = async (e) => {
@@ -3195,6 +3193,7 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
     setLowStock(false);
   };
   const remove = (id) => onChange(list.filter((i) => i.id !== id));
+  const moveTo = (id, location) => onChange(moveInventoryItem(list, id, location));
   const toggleLowStock = (id) => {
     const item = list.find((i) => i.id === id);
     const willBeLow = item ? !item.lowStock : false;
