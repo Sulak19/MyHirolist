@@ -48,7 +48,7 @@ import {
 } from "./lib/dogTreatments.js";
 import { getToday } from "./lib/api.js";
 import { C, useTheme } from "./lib/theme.js";
-import { moveInventoryItem } from "./lib/inventory.js";
+import { moveInventoryItem, withInventoryStaples } from "./lib/inventory.js";
 
 /* ---------------------------------------------------------
    Home Base — a household dashboard
@@ -235,10 +235,11 @@ const DEFAULT_DATA = {
 async function loadState(setData, setLoaded) {
   try {
     const remote = await loadHouseholdData();
-    setData(rolloverWeeks(mergeWithDefaults(DEFAULT_DATA, remote)));
+    const merged = rolloverWeeks(mergeWithDefaults(DEFAULT_DATA, remote));
+    setData({ ...merged, inventory: withInventoryStaples(merged.inventory) });
   } catch (e) {
     console.error("load failed", e);
-    setData(DEFAULT_DATA);
+    setData({ ...DEFAULT_DATA, inventory: withInventoryStaples(DEFAULT_DATA.inventory) });
   } finally {
     setLoaded(true);
   }
@@ -444,7 +445,8 @@ export default function HomeBase() {
   useEffect(() => {
     const unsubscribe = subscribeToHouseholdData((remoteData) => {
       isRemoteUpdateRef.current = true;
-      setData(rolloverWeeks(mergeWithDefaults(DEFAULT_DATA, remoteData)));
+      const merged = rolloverWeeks(mergeWithDefaults(DEFAULT_DATA, remoteData));
+      setData({ ...merged, inventory: withInventoryStaples(merged.inventory) });
     });
     return unsubscribe;
   }, []);
@@ -592,7 +594,7 @@ export default function HomeBase() {
                 return {
                   ...current,
                   inventory: [
-                    { id: uid(), name: item.name.trim(), location: RECENT_SHOP, expiry: null, lowStock: false },
+                    { id: uid(), name: item.name.trim(), location: RECENT_SHOP, expiry: null, lowStock: false, staple: null },
                     ...(current.inventory ?? []),
                   ],
                 };
@@ -3169,6 +3171,7 @@ function round1(n) {
 function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
   const [name, setName] = useState("");
   const [loc, setLoc] = useState("Fridge");
+  const [staple, setStaple] = useState(false);
   const [expiry, setExpiry] = useState("");
   const [lowStock, setLowStock] = useState(false);
   const fileInputRef = useRef(null);
@@ -3182,7 +3185,7 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
     const isLow = lowStock;
     onChange([
       ...list,
-      { id: uid(), name: name.trim(), location: loc, expiry: loc === "Pantry" || loc === "Supplements" ? null : expiry || null, lowStock: isLow },
+      { id: uid(), name: name.trim(), location: loc, expiry: loc === "Pantry" || loc === "Supplements" ? null : expiry || null, lowStock: isLow, staple },
     ]);
     if (isLow) {
       const already = shoppingList.some((s) => s.name.trim().toLowerCase() === name.trim().toLowerCase());
@@ -3191,9 +3194,12 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
     setName("");
     setExpiry("");
     setLowStock(false);
+    setStaple(false);
   };
   const remove = (id) => onChange(list.filter((i) => i.id !== id));
-  const moveTo = (id, location) => onChange(moveInventoryItem(list, id, location));
+  const moveTo = (id, location, isStaple) => onChange(moveInventoryItem(list, id, location, isStaple));
+  const setItemStaple = (id, isStaple) =>
+    onChange(list.map((item) => (item.id === id ? { ...item, staple: isStaple } : item)));
   const toggleLowStock = (id) => {
     const item = list.find((i) => i.id === id);
     const willBeLow = item ? !item.lowStock : false;
@@ -3237,7 +3243,7 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
         setScanError("Couldn't find any items in that photo — try a clearer shot.");
       } else {
         setScanResults(
-          items.map((n) => ({ id: uid(), name: String(n).trim(), checked: true, location: "Fridge" }))
+          items.map((n) => ({ id: uid(), name: String(n).trim(), checked: true, location: "Fridge", staple: false }))
         );
       }
     } catch (err) {
@@ -3252,6 +3258,8 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
     setScanResults((prev) => prev.map((i) => (i.id === id ? { ...i, checked: !i.checked } : i)));
   const setScanItemLocation = (id, location) =>
     setScanResults((prev) => prev.map((i) => (i.id === id ? { ...i, location } : i)));
+  const setScanItemStaple = (id, isStaple) =>
+    setScanResults((prev) => prev.map((i) => (i.id === id ? { ...i, staple: isStaple } : i)));
   const setScanItemName = (id, newName) =>
     setScanResults((prev) => prev.map((i) => (i.id === id ? { ...i, name: newName } : i)));
   const removeScanItem = (id) => setScanResults((prev) => prev.filter((i) => i.id !== id));
@@ -3259,7 +3267,7 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
   const confirmScanResults = () => {
     const toAdd = scanResults
       .filter((i) => i.checked && i.name.trim())
-      .map((i) => ({ id: uid(), name: i.name.trim(), location: i.location, expiry: null, lowStock: false }));
+      .map((i) => ({ id: uid(), name: i.name.trim(), location: i.location, expiry: null, lowStock: false, staple: i.staple }));
     if (toAdd.length > 0) onChange([...list, ...toAdd]);
     setScanResults(null);
   };
@@ -3344,6 +3352,15 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
                       </button>
                     ))}
                   </div>
+                  <select
+                    aria-label={`Type for ${item.name}`}
+                    style={{ ...styles.select, padding: "4px 7px", fontSize: 11 }}
+                    value={item.staple ? "staple" : "non-staple"}
+                    onChange={(e) => setScanItemStaple(item.id, e.target.value === "staple")}
+                  >
+                    <option value="staple">Staple</option>
+                    <option value="non-staple">Non-staple</option>
+                  </select>
                   <button style={styles.xBtn} onClick={() => removeScanItem(item.id)}>
                     <X size={14} />
                   </button>
@@ -3370,6 +3387,10 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
           <option>Pantry</option>
           <option>Supplements</option>
         </select>
+        <select aria-label="Item type" style={styles.select} value={staple ? "staple" : "non-staple"} onChange={(e) => setStaple(e.target.value === "staple")}>
+          <option value="staple">Staple</option>
+          <option value="non-staple">Non-staple</option>
+        </select>
         <IconBtn onClick={add} />
       </AddRow>
       <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -3389,7 +3410,7 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
         </button>
       </div>
 
-      <InventoryGroup title="Fridge" icon={Refrigerator} items={fridge} onRemove={remove} onToggleLowStock={toggleLowStock} />
+      <InventoryGroup title="Fridge" icon={Refrigerator} items={fridge} onRemove={remove} onToggleLowStock={toggleLowStock} onSetStaple={setItemStaple} />
       {recent.length > 0 && (
         <InventoryGroup
           title={RECENT_SHOP}
@@ -3398,16 +3419,17 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
           onRemove={remove}
           onToggleLowStock={toggleLowStock}
           onMove={moveTo}
+          onSetStaple={setItemStaple}
         />
       )}
-      <InventoryGroup title="Freezer" icon={Snowflake} items={freezer} onRemove={remove} onToggleLowStock={toggleLowStock} />
-      <InventoryGroup title="Pantry" icon={Package} items={pantry} onRemove={remove} onToggleLowStock={toggleLowStock} />
-      <InventoryGroup title="Supplements" icon={Pill} items={supplements} onRemove={remove} onToggleLowStock={toggleLowStock} />
+      <InventoryGroup title="Freezer" icon={Snowflake} items={freezer} onRemove={remove} onToggleLowStock={toggleLowStock} onSetStaple={setItemStaple} />
+      <InventoryGroup title="Pantry" icon={Package} items={pantry} onRemove={remove} onToggleLowStock={toggleLowStock} onSetStaple={setItemStaple} />
+      <InventoryGroup title="Supplements" icon={Pill} items={supplements} onRemove={remove} onToggleLowStock={toggleLowStock} onSetStaple={setItemStaple} />
     </div>
   );
 }
 
-function InventoryGroup({ title, icon: Icon, items, onRemove, onToggleLowStock, onMove }) {
+function InventoryGroup({ title, icon: Icon, items, onRemove, onToggleLowStock, onMove, onSetStaple }) {
   const isPantry = title === "Pantry" || title === "Supplements";
   return (
     <div style={{ marginTop: 18 }}>
@@ -3427,11 +3449,26 @@ function InventoryGroup({ title, icon: Icon, items, onRemove, onToggleLowStock, 
                     {days < 0 ? "expired" : days === 0 ? "expires today" : `expires in ${days}d`}
                   </div>
                 )}
+                <select
+                  aria-label={`Type for ${i.name}`}
+                  style={{ ...styles.select, padding: "3px 7px", fontSize: 10.5, marginTop: 5 }}
+                  value={typeof i.staple === "boolean" ? (i.staple ? "staple" : "non-staple") : ""}
+                  onChange={(e) => onSetStaple(i.id, e.target.value === "staple")}
+                >
+                  <option value="" disabled>Choose type…</option>
+                  <option value="staple">Staple</option>
+                  <option value="non-staple">Non-staple</option>
+                </select>
                 {/* Fresh from the shop: say where it goes and it leaves this group. */}
                 {onMove && (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 5 }}>
                     {["Fridge", "Freezer", "Pantry", "Supplements"].map((destination) => (
-                      <button key={destination} style={styles.putAwayBtn} onClick={() => onMove(i.id, destination)}>
+                      <button
+                        key={destination}
+                        disabled={typeof i.staple !== "boolean"}
+                        style={{ ...styles.putAwayBtn, opacity: typeof i.staple === "boolean" ? 1 : 0.4 }}
+                        onClick={() => onMove(i.id, destination, i.staple)}
+                      >
                         {destination}
                       </button>
                     ))}
