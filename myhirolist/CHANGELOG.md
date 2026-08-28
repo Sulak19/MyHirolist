@@ -1,3 +1,9 @@
+## 1.0.27
+
+Merge pull request #14 from Sulak19/codex/selected-meal-shopping-metadata
+
+Categorise selected meal ingredients consistently
+
 ## 1.0.25
 
 Merge pull request #12 from Sulak19/codex/friday-plan-rollover
