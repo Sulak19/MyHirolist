@@ -11,6 +11,7 @@ import {
   planWeek,
   shoppingNeeds,
   reconcileShopping,
+  addSelectedMealsToShopping,
   isPrepOnlyLowStock,
   removePrepOnlyShoppingItems,
   prepTasks,
@@ -258,6 +259,51 @@ test("reconciling twice in a row changes nothing", () => {
 
   assert.equal(second.items.length, first.items.length);
   assert.deepEqual(second.items.map((i) => i.name).sort(), first.items.map((i) => i.name).sort());
+});
+
+test("selected meals add consistently categorised shopping items with meal names", () => {
+  let nextId = 0;
+  const result = addSelectedMealsToShopping(
+    [],
+    [MEALS.find((meal) => meal.id === "hamburg"), MEALS.find((meal) => meal.id === "bibimbap")],
+    [],
+    () => `selected-${++nextId}`
+  );
+
+  const beef = result.items.find((item) => item.name === "beef mince");
+  const onions = result.items.find((item) => item.name === "onions");
+  const spinach = result.items.find((item) => item.name === "spinach");
+
+  assert.equal(result.addedCount, 4, "shared ingredients are listed once");
+  assert.equal(beef.category, "Meat & fish");
+  assert.deepEqual(beef.forMeals, ["Hamburg", "Bibimbap"]);
+  assert.equal(onions.category, "Produce");
+  assert.deepEqual(onions.forMeals, ["Hamburg"]);
+  assert.equal(spinach.category, "Produce");
+  assert.deepEqual(spinach.forMeals, ["Bibimbap"]);
+  assert.ok(result.items.every((item) => item.source === "selected-meals" && item.reasons.includes("meal")));
+});
+
+test("selecting a meal enriches an existing plain shopping entry", () => {
+  const existing = [{ id: "manual-onions", name: "onions", checked: false }];
+  const result = addSelectedMealsToShopping(existing, [MEALS.find((meal) => meal.id === "hamburg")], [], () => "new");
+  const onions = result.items.find((item) => item.id === "manual-onions");
+
+  assert.equal(onions.category, "Produce");
+  assert.deepEqual(onions.forMeals, ["Hamburg"]);
+  assert.deepEqual(onions.reasons, ["meal"]);
+  assert.equal(result.items.filter((item) => item.name === "onions").length, 1);
+});
+
+test("selected meals skip stocked ingredients and prep-only low-stock staples", () => {
+  const meal = { id: "toast", name: "Toast", ingredients: ["Bread", "Milk", "Jam"] };
+  const inventory = [
+    { name: "Bread", location: "Freezer", lowStock: true },
+    { name: "Milk", location: "Fridge", lowStock: false },
+  ];
+  const result = addSelectedMealsToShopping([], [meal], inventory, () => "jam");
+
+  assert.deepEqual(result.items.map((item) => item.name), ["Jam"]);
 });
 
 // --- prep --------------------------------------------------------------

@@ -327,6 +327,87 @@ export function shoppingNeeds(weeks, meals, batches, inventory) {
   });
 }
 
+/**
+ * Adds ingredients from meals explicitly selected on the Meals tab.
+ *
+ * These entries are intentionally not source: "plan": selected meals can be
+ * shopping ideas without being assigned to a week, so the normal plan
+ * reconciliation must not remove them. They still receive the same aisle and
+ * meal metadata as planned ingredients.
+ */
+export function addSelectedMealsToShopping(shopping, meals, inventory, createId = () => undefined) {
+  const existing = [...asArray(shopping)];
+  const added = [];
+  const byName = new Map();
+  let changed = false;
+
+  for (const item of existing) {
+    const key = norm(item?.name);
+    if (key && !byName.has(key)) byName.set(key, item);
+  }
+
+  const replaceItem = (current, updated) => {
+    const existingIndex = existing.indexOf(current);
+    if (existingIndex >= 0) existing[existingIndex] = updated;
+    else {
+      const addedIndex = added.indexOf(current);
+      if (addedIndex >= 0) added[addedIndex] = updated;
+    }
+  };
+
+  const stocked = availableStock(inventory);
+  const prepOnly = prepOnlyLowStock(inventory);
+
+  for (const meal of asArray(meals)) {
+    const mealName = String(meal?.name ?? "").trim();
+    if (!mealName) continue;
+
+    for (const ingredient of asArray(meal?.ingredients)) {
+      const key = norm(ingredient);
+      if (!key || stocked.has(key) || prepOnly.has(key)) continue;
+
+      const current = byName.get(key);
+      if (current) {
+        const category = !current.category || current.category === "Other" ? categoryOf(ingredient) : current.category;
+        const forMeals = [...new Set([...asArray(current.forMeals), mealName])];
+        const reasons = [...new Set([...asArray(current.reasons), "meal"])];
+        const metadataChanged =
+          category !== current.category ||
+          forMeals.length !== asArray(current.forMeals).length ||
+          reasons.length !== asArray(current.reasons).length;
+
+        if (metadataChanged) {
+          const updated = { ...current, category, forMeals, reasons };
+          replaceItem(current, updated);
+          byName.set(key, updated);
+          changed = true;
+        }
+        continue;
+      }
+
+      const item = {
+        id: createId(),
+        name: String(ingredient).trim(),
+        checked: false,
+        source: "selected-meals",
+        category: categoryOf(ingredient),
+        forMeals: [mealName],
+        weeks: [],
+        reasons: ["meal"],
+      };
+      added.push(item);
+      byName.set(key, item);
+      changed = true;
+    }
+  }
+
+  return {
+    items: changed ? [...added, ...existing] : asArray(shopping),
+    addedCount: added.length,
+    changed,
+  };
+}
+
 // Kitchen locations map onto shopping aisles well enough to be worth using.
 export function locationCategory(location) {
   switch (location) {

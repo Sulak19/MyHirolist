@@ -30,7 +30,7 @@ import {
   replan,
   shoppingNeeds,
   reconcileShopping,
-  isPrepOnlyLowStock,
+  addSelectedMealsToShopping,
   removePrepOnlyShoppingItems,
   prepTasks,
   reconcilePrep,
@@ -1379,22 +1379,9 @@ function detectMeatsFromInventory(inventory) {
 }
 
 function addMealsToShoppingList(mealsArr, shoppingList, onShoppingChange, inventory = []) {
-  const existingNames = new Set(shoppingList.map((i) => i.name.trim().toLowerCase()));
-  const stockedNames = new Set(
-    inventory.filter((i) => !i.lowStock).map((i) => i.name.trim().toLowerCase())
-  );
-  const newItems = [];
-  mealsArr.forEach((m) => {
-    (m.ingredients || []).forEach((ing) => {
-      const key = ing.trim().toLowerCase();
-      if (key && !existingNames.has(key) && !stockedNames.has(key) && !isPrepOnlyLowStock(ing, inventory)) {
-        existingNames.add(key);
-        newItems.push({ id: uid(), name: ing.trim(), checked: false });
-      }
-    });
-  });
-  if (newItems.length > 0) onShoppingChange([...newItems, ...shoppingList]);
-  return newItems.length;
+  const result = addSelectedMealsToShopping(shoppingList, mealsArr, inventory, uid);
+  if (result.changed) onShoppingChange(result.items);
+  return result.addedCount;
 }
 
 function addMealsToPrepList(mealsArr, prepList, onPrepChange) {
