@@ -12,6 +12,7 @@ import {
   shoppingNeeds,
   reconcileShopping,
   addSelectedMealsToShopping,
+  addSelectedMealsToPrep,
   isPrepOnlyLowStock,
   removePrepOnlyShoppingItems,
   prepTasks,
@@ -321,6 +322,47 @@ test("prep groups the same ingredient across meals into one job", () => {
 test("protein prep is listed before vegetables", () => {
   const tasks = prepTasks({ Monday: "hamburg" }, {}, MEALS, BATCHES);
   assert.match(tasks[0].label, /Marinate & portion/);
+});
+
+test("weekend prep excludes pantry, dairy and other day-of ingredients", () => {
+  const meals = [{
+    id: "curry",
+    name: "Curry",
+    ingredients: ["chicken", "onion", "rice", "soy sauce", "coconut milk", "cooking oil"],
+  }];
+  const tasks = prepTasks({ Monday: "curry" }, {}, meals, []);
+
+  assert.deepEqual(tasks.map((task) => task.label), ["Marinate & portion chicken", "Wash & chop onion"]);
+});
+
+test("selected meals share grouped prep tasks and do not duplicate plan prep", () => {
+  const meals = [
+    { id: "one", name: "Meal one", ingredients: ["chicken", "onion"] },
+    { id: "two", name: "Meal two", ingredients: ["onion", "rice"] },
+  ];
+  const selected = addSelectedMealsToPrep([], meals, () => "new");
+  const onions = selected.items.find((task) => task.label === "Wash & chop onion");
+  assert.equal(selected.items.filter((task) => task.label === "Wash & chop onion").length, 1);
+  assert.equal(onions.meal, "Meal one, Meal two");
+
+  const planned = prepTasks({ Monday: "one", Tuesday: "two" }, {}, meals, []);
+  const reconciled = reconcilePrep(selected.items, planned);
+  assert.equal(reconciled.filter((task) => task.key === onions.key).length, 1);
+});
+
+test("selected meal prep replaces old unfinished generated rows but keeps manual and completed work", () => {
+  const meals = [{ id: "one", name: "Meal one", ingredients: ["onion"] }];
+  const existing = [
+    { id: "legacy", meal: "Meal one", label: "Wash & chop veg — onion", checked: false },
+    { id: "done", meal: "Meal one", label: "Old completed prep", checked: true },
+    { id: "manual", meal: null, label: "Sharpen knives", checked: false },
+  ];
+  const result = addSelectedMealsToPrep(existing, meals, () => "new");
+
+  assert.ok(!result.items.some((task) => task.id === "legacy"));
+  assert.ok(result.items.some((task) => task.id === "done"));
+  assert.ok(result.items.some((task) => task.id === "manual"));
+  assert.equal(result.items.filter((task) => task.label === "Wash & chop onion").length, 1);
 });
 
 test("a meal with its own prep notes keeps them verbatim", () => {
