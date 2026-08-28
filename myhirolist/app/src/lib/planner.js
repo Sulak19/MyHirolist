@@ -514,69 +514,127 @@ export function reconcileShopping(shopping, needs, dismissed = []) {
  * Returns [{ key, label, dayOf, meal, week, kind }]; `key` is stable so the
  * list can be reconciled without losing which tasks are already ticked.
  */
+function prepActionForIngredient(ingredient) {
+  const category = categoryOf(ingredient);
+  if (category === "Meat & fish") return "Marinate & portion";
+  if (category === "Produce") return "Wash & chop";
+  return null;
+}
+
+function mergePrepTask(tasks, task) {
+  const current = tasks.get(task.key);
+  if (!current) {
+    tasks.set(task.key, task);
+    return;
+  }
+
+  const meals = [...new Set([...String(current.meal ?? "").split(", "), ...String(task.meal ?? "").split(", ")].filter(Boolean))];
+  tasks.set(task.key, {
+    ...current,
+    meal: meals.join(", "),
+    week: current.week === "this" || task.week === "this" ? "this" : "next",
+  });
+}
+
+function collectMealPrep(tasks, meal, week) {
+  if (meal.prepNotes) {
+    const { prep, dayOf } = splitPrepNote(meal.prepNotes);
+    if (!prep) return;
+    mergePrepTask(tasks, {
+      key: `meal::${meal.id}::${norm(prep)}`,
+      label: prep,
+      dayOf,
+      meal: meal.name,
+      kind: "meal",
+      week,
+    });
+    return;
+  }
+
+  for (const ingredient of asArray(meal.ingredients)) {
+    const ingredientKey = norm(ingredient);
+    const action = prepActionForIngredient(ingredient);
+    if (!ingredientKey || !action) continue;
+    mergePrepTask(tasks, {
+      key: `ingredient::${norm(action)}::${ingredientKey}`,
+      label: `${action} ${String(ingredient).trim()}`,
+      dayOf: null,
+      meal: meal.name,
+      kind: "ingredient",
+      week,
+    });
+  }
+}
+
 export function prepTasks(thisWeekPlan, nextWeekPlan, meals, batches, inventory = []) {
-  const tasks = [...prepOnlyLowStock(inventory).values()].map(({ label }) => ({
-    label,
-    dayOf: null,
-    meal: "Low stock",
-    kind: "stock",
-    week: "this",
-  }));
-  const seen = new Set();
+  const tasks = new Map();
+  for (const { label } of prepOnlyLowStock(inventory).values()) {
+    mergePrepTask(tasks, {
+      key: `stock::${norm(label)}`,
+      label,
+      dayOf: null,
+      meal: "Low stock",
+      kind: "stock",
+      week: "this",
+    });
+  }
 
+  const seenMeals = new Set();
   const collect = (plan, week) => {
-    const bespoke = [];
-    const byIngredient = new Map();
-
     for (const { meal } of resolvePlanned(plan, meals, batches)) {
-      if (!meal || seen.has(meal.id)) continue;
-
+      if (!meal || seenMeals.has(meal.id)) continue;
       // Next week is only worth touching this weekend if it actually keeps.
-      // Chopping salad a week early helps nobody.
       if (week === "next" && !freezesWell(meal)) continue;
-      seen.add(meal.id);
-
-      if (meal.prepNotes) {
-        const { prep, dayOf } = splitPrepNote(meal.prepNotes);
-        bespoke.push({ label: prep, dayOf, meal: meal.name, kind: "meal", week });
-        continue;
-      }
-
-      for (const ingredient of asArray(meal.ingredients)) {
-        const key = norm(ingredient);
-        if (!key) continue;
-        const action = isProtein(ingredient) ? "Marinate & portion" : "Wash & chop";
-        const groupKey = `${action}::${key}`;
-
-        const existing = byIngredient.get(groupKey);
-        if (existing) {
-          if (!existing.meals.includes(meal.name)) existing.meals.push(meal.name);
-        } else {
-          byIngredient.set(groupKey, { action, ingredient: String(ingredient).trim(), meals: [meal.name] });
-        }
-      }
+      seenMeals.add(meal.id);
+      collectMealPrep(tasks, meal, week);
     }
-
-    const grouped = [...byIngredient.values()]
-      .sort((a, b) => {
-        const byAction = a.action === b.action ? 0 : a.action === "Marinate & portion" ? -1 : 1;
-        return byAction !== 0 ? byAction : a.ingredient.localeCompare(b.ingredient);
-      })
-      .map((task) => ({
-        label: `${task.action} ${task.ingredient}`,
-        dayOf: null,
-        meal: task.meals.join(", "),
-        kind: "ingredient",
-        week,
-      }));
-
-    tasks.push(...grouped, ...bespoke);
   };
 
   collect(thisWeekPlan, "this");
   collect(nextWeekPlan, "next");
 
-  return tasks.map((task) => ({ ...task, key: `${task.week}::${task.meal}::${task.label}` }));
+  return [...tasks.values()].sort((a, b) => {
+    const rank = (task) => task.kind === "stock" ? 0 : task.label.startsWith("Marinate & portion") ? 1 : task.label.startsWith("Wash & chop") ? 2 : 3;
+    const byRank = rank(a) - rank(b);
+    if (byRank !== 0) return byRank;
+    return a.kind === "stock" && b.kind === "stock" ? 0 : a.label.localeCompare(b.label);
+  });
+}
+
+/** Adds prep for meals explicitly selected on the Meals tab. */
+export function addSelectedMealsToPrep(existing, meals, createId = () => undefined) {
+  const generated = new Map();
+  for (const meal of asArray(meals)) {
+    if (meal?.name) collectMealPrep(generated, meal, "this");
+  }
+
+  // Old versions created unlabelled, meal-owned rows. Replace unfinished
+  // copies with the new grouped tasks, while retaining anything completed.
+  const items = asArray(existing).filter((item) => item?.source || !item?.meal || item.checked);
+  const byKey = new Map(items.filter((item) => item?.key).map((item) => [item.key, item]));
+  let changed = items.length !== asArray(existing).length;
+  let addedCount = 0;
+
+  for (const [key, task] of generated) {
+    const current = byKey.get(key);
+    if (current) {
+      const mealsForTask = [...new Set([...String(current.meal ?? "").split(", "), ...String(task.meal ?? "").split(", ")].filter(Boolean))].join(", ");
+      if (mealsForTask !== current.meal) {
+        const index = items.indexOf(current);
+        items[index] = { ...current, meal: mealsForTask };
+        byKey.set(key, items[index]);
+        changed = true;
+      }
+      continue;
+    }
+    const added = { ...task, id: createId(), checked: false, source: "selected-meals" };
+    items.push(added);
+    byKey.set(key, added);
+    addedCount += 1;
+    changed = true;
+  }
+
+  return { items, addedCount, changed };
 }
 
 /**
@@ -609,8 +667,21 @@ export function reconcilePrep(existing, tasks) {
   const seenKeys = new Set();
 
   for (const item of list) {
+    if (item?.source === "selected-meals") {
+      if (item.key && wanted.has(item.key)) {
+        const task = wanted.get(item.key);
+        const meals = [...new Set([...String(item.meal ?? "").split(", "), ...String(task.meal ?? "").split(", ")].filter(Boolean))].join(", ");
+        kept.push({ ...item, label: task.label, dayOf: task.dayOf, meal: meals, week: task.week, kind: task.kind });
+        seenKeys.add(item.key);
+      } else {
+        kept.push(item);
+      }
+      continue;
+    }
     if (item?.source !== "plan") {
-      kept.push(item); // added by hand
+      // True manual rows have no meal. Older selected-meal rows did, and are
+      // safely replaced once by the grouped planner output.
+      if (!item?.meal || item.checked) kept.push(item);
       continue;
     }
     if (!item.key) continue; // from an older version; let it be replaced

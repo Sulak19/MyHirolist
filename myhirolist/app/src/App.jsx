@@ -31,6 +31,7 @@ import {
   shoppingNeeds,
   reconcileShopping,
   addSelectedMealsToShopping,
+  addSelectedMealsToPrep,
   removePrepOnlyShoppingItems,
   prepTasks,
   reconcilePrep,
@@ -47,7 +48,7 @@ import {
 } from "./lib/dogTreatments.js";
 import { getToday } from "./lib/api.js";
 import { C, useTheme } from "./lib/theme.js";
-import { moveInventoryItem } from "./lib/inventory.js";
+import { moveInventoryItem, withInventoryStaples } from "./lib/inventory.js";
 
 /* ---------------------------------------------------------
    Home Base — a household dashboard
@@ -234,10 +235,11 @@ const DEFAULT_DATA = {
 async function loadState(setData, setLoaded) {
   try {
     const remote = await loadHouseholdData();
-    setData(rolloverWeeks(mergeWithDefaults(DEFAULT_DATA, remote)));
+    const merged = rolloverWeeks(mergeWithDefaults(DEFAULT_DATA, remote));
+    setData({ ...merged, inventory: withInventoryStaples(merged.inventory) });
   } catch (e) {
     console.error("load failed", e);
-    setData(DEFAULT_DATA);
+    setData({ ...DEFAULT_DATA, inventory: withInventoryStaples(DEFAULT_DATA.inventory) });
   } finally {
     setLoaded(true);
   }
@@ -291,7 +293,12 @@ function usePlanShopping(data, setData, ready) {
    enough - there is no button to press, because a list you have to remember
    to refresh is a list that goes stale. */
 function usePlanPrep(data, setData, ready) {
-  const signature = JSON.stringify([data?.weekPlan, data?.nextWeekPlan, data?.inventory?.map((i) => [i.name, i.lowStock])]);
+  const signature = JSON.stringify([
+    data?.weekPlan,
+    data?.nextWeekPlan,
+    data?.inventory?.map((i) => [i.name, i.lowStock]),
+    data?.mealPrep?.map((meal) => [meal.id, meal.name, meal.ingredients, meal.prepNotes]),
+  ]);
 
   useEffect(() => {
     if (!ready || !data) return;
@@ -299,8 +306,9 @@ function usePlanPrep(data, setData, ready) {
     const tasks = prepTasks(data.weekPlan, data.nextWeekPlan, data.mealPrep, data.batchCooking, data.inventory);
     const next = reconcilePrep(data.weekendPrep, tasks);
 
-    const before = (data.weekendPrep ?? []).map((t) => `${t.key ?? t.label}:${t.checked}`).sort().join("|");
-    const after = next.map((t) => `${t.key ?? t.label}:${t.checked}`).sort().join("|");
+    const describe = (task) => JSON.stringify([task.key ?? task.label, task.label, task.meal, task.dayOf, task.week, task.kind, task.source, task.checked]);
+    const before = (data.weekendPrep ?? []).map(describe).sort().join("|");
+    const after = next.map(describe).sort().join("|");
     if (before === after) return;
 
     setData((current) => ({
@@ -437,7 +445,8 @@ export default function HomeBase() {
   useEffect(() => {
     const unsubscribe = subscribeToHouseholdData((remoteData) => {
       isRemoteUpdateRef.current = true;
-      setData(rolloverWeeks(mergeWithDefaults(DEFAULT_DATA, remoteData)));
+      const merged = rolloverWeeks(mergeWithDefaults(DEFAULT_DATA, remoteData));
+      setData({ ...merged, inventory: withInventoryStaples(merged.inventory) });
     });
     return unsubscribe;
   }, []);
@@ -585,7 +594,7 @@ export default function HomeBase() {
                 return {
                   ...current,
                   inventory: [
-                    { id: uid(), name: item.name.trim(), location: RECENT_SHOP, expiry: null, lowStock: false },
+                    { id: uid(), name: item.name.trim(), location: RECENT_SHOP, expiry: null, lowStock: false, staple: null },
                     ...(current.inventory ?? []),
                   ],
                 };
@@ -1313,20 +1322,6 @@ function PlanTab({ meals, plan, onPlanChange, planAuto, planWeek: activeWeek, on
 /* ---------------- MEALS ---------------- */
 const PROTEIN_ORDER = ["Chicken", "Beef", "Pork", "Lamb", "Fish", "Misc"];
 
-const PROTEIN_KEYWORDS = ["chicken", "beef", "pork", "lamb", "steak", "spec", "mince", "tofu", "egg", "fish", "shrimp", "sausage", "kabana", "bacon", "chorizo"];
-const SKIP_KEYWORDS = [
-  "sauce", "paste", "vinegar", "oil", "stock", "rice", "noodle", "spaghetti", "udon",
-  "powder", "gochugaru", "gochujang", "cheese", "chips", "tortilla", "bread", "spice",
-  "sour cream", "bay leaves", "tacos", "5 spice", "tinned", "coriander",
-  "rigatoni", "pasta", "parmesan", "padano", "wrap", "broth",
-];
-function classifyIngredient(ing) {
-  const lower = ing.toLowerCase();
-  if (PROTEIN_KEYWORDS.some((k) => lower.includes(k))) return "protein";
-  if (SKIP_KEYWORDS.some((k) => lower.includes(k))) return "skip";
-  return "veg";
-}
-
 /* Reads a File/Blob and redraws it through a canvas to normalize to JPEG.
    Fixes iPhone photos captured as HEIC, which the vision API rejects. */
 async function fileToJpegBase64(file, maxDim = 1600) {
@@ -1385,46 +1380,9 @@ function addMealsToShoppingList(mealsArr, shoppingList, onShoppingChange, invent
 }
 
 function addMealsToPrepList(mealsArr, prepList, onPrepChange) {
-  const existingLabels = new Set(prepList.map((t) => `${t.meal}::${t.label}`));
-  const newTasks = [];
-  mealsArr.forEach((m) => {
-    if (m.prepNotes) {
-      const label = m.prepNotes;
-      if (!existingLabels.has(`${m.name}::${label}`)) {
-        newTasks.push({ id: uid(), meal: m.name, label, checked: false });
-        existingLabels.add(`${m.name}::${label}`);
-      }
-      return;
-    }
-    const proteins = (m.ingredients || []).filter((i) => classifyIngredient(i) === "protein");
-    const vegs = (m.ingredients || []).filter((i) => classifyIngredient(i) === "veg");
-    let addedAny = false;
-    if (proteins.length) {
-      const label = `Marinate/portion protein — ${proteins.join(", ")}`;
-      if (!existingLabels.has(`${m.name}::${label}`)) {
-        newTasks.push({ id: uid(), meal: m.name, label, checked: false });
-        existingLabels.add(`${m.name}::${label}`);
-        addedAny = true;
-      }
-    }
-    if (vegs.length) {
-      const label = `Wash & chop veg — ${vegs.join(", ")}`;
-      if (!existingLabels.has(`${m.name}::${label}`)) {
-        newTasks.push({ id: uid(), meal: m.name, label, checked: false });
-        existingLabels.add(`${m.name}::${label}`);
-        addedAny = true;
-      }
-    }
-    if (!addedAny) {
-      const label = "Prep ingredients (add ingredient list on Meals tab for detail)";
-      if (!existingLabels.has(`${m.name}::${label}`)) {
-        newTasks.push({ id: uid(), meal: m.name, label, checked: false });
-        existingLabels.add(`${m.name}::${label}`);
-      }
-    }
-  });
-  if (newTasks.length > 0) onPrepChange([...prepList, ...newTasks]);
-  return newTasks.length;
+  const result = addSelectedMealsToPrep(prepList, mealsArr, uid);
+  if (result.changed) onPrepChange(result.items);
+  return result.addedCount;
 }
 
 function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, onPrepChange, inventory, selectedIds, onSelectionChange }) {
@@ -1432,6 +1390,7 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
   const [ingredients, setIngredientsDraft] = useState("");
   const [tagVals, setTagVals] = useState(new Set(["Misc"]));
   const [url, setUrl] = useState("");
+  const [prepNotes, setPrepNotes] = useState("");
   const [showAddMeal, setShowAddMeal] = useState(false);
   const selected = new Set(selectedIds);
   const setSelected = (updater) => {
@@ -1478,6 +1437,7 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
     setName("");
     setIngredientsDraft("");
     setUrl("");
+    setPrepNotes("");
     setTagVals(new Set(["Misc"]));
   };
   const closeAddMeal = () => {
@@ -1494,6 +1454,7 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
         name: name.trim(),
         tags,
         url: url.trim() || undefined,
+        prepNotes: prepNotes.trim() || undefined,
         ingredients: ingredients.split(",").map((item) => item.trim()).filter(Boolean),
       },
     ]);
@@ -1822,6 +1783,17 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
             </div>
 
             <div style={{ marginTop: 14 }}>
+              <Field label="Weekend prep (optional)">
+                <textarea
+                  style={{ ...styles.input, width: "100%", minHeight: 76, resize: "vertical" }}
+                  placeholder="e.g. Marinate chicken and freeze. Day-of: defrost and cook."
+                  value={prepNotes}
+                  onChange={(e) => setPrepNotes(e.target.value)}
+                />
+              </Field>
+            </div>
+
+            <div style={{ marginTop: 14 }}>
               <Field label="Recipe link (optional)">
                 <input
                   style={{ ...styles.input, width: "100%" }}
@@ -1864,6 +1836,7 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
    keeps the meal as a small tag, and shows how much is left. */
 function PrepTab({ list, onChange }) {
   const [name, setName] = useState("");
+  const [showAddPrep, setShowAddPrep] = useState(false);
 
   const toggle = (id) => onChange(list.map((t) => (t.id === id ? { ...t, checked: !t.checked } : t)));
   const remove = (id) => onChange(list.filter((t) => t.id !== id));
@@ -1872,6 +1845,11 @@ function PrepTab({ list, onChange }) {
     if (!name.trim()) return;
     onChange([...list, { id: uid(), meal: null, label: name.trim(), checked: false }]);
     setName("");
+    setShowAddPrep(false);
+  };
+  const closeAddPrep = () => {
+    setName("");
+    setShowAddPrep(false);
   };
 
   const open = list.filter((t) => !t.checked);
@@ -1924,7 +1902,15 @@ function PrepTab({ list, onChange }) {
 
   return (
     <div>
-      <SectionTitle>Weekend prep</SectionTitle>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
+        <h2 style={{ ...styles.h2, margin: 0 }}>Weekend prep</h2>
+        <button
+          style={{ ...styles.addSpendBtn, marginTop: 0, padding: "7px 11px", flexShrink: 0 }}
+          onClick={() => setShowAddPrep(true)}
+        >
+          <Plus size={14} /> Add prep
+        </button>
+      </div>
       <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 12 }}>
         Cutting, marinating, portioning, and making low-stock staples. Tasks appear here automatically.
       </div>
@@ -1969,18 +1955,47 @@ function PrepTab({ list, onChange }) {
         </div>
       )}
 
-      <div style={{ marginTop: 20 }}>
-        <AddRow>
-          <input
-            style={styles.input}
-            placeholder="Add your own prep task"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addManual()}
-          />
-          <IconBtn onClick={addManual} />
-        </AddRow>
-      </div>
+      {showAddPrep && (
+        <div style={styles.restoreSheet} onClick={closeAddPrep}>
+          <form
+            style={styles.restoreInner}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="add-prep-title"
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={(e) => {
+              e.preventDefault();
+              addManual();
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              <h2 id="add-prep-title" style={{ ...styles.h2, margin: 0 }}>Add a prep task</h2>
+              <button type="button" aria-label="Close add prep form" style={styles.xBtn} onClick={closeAddPrep}>
+                <X size={18} />
+              </button>
+            </div>
+            <div style={{ marginTop: 16 }}>
+              <Field label="Prep task">
+                <input
+                  autoFocus
+                  style={{ ...styles.input, width: "100%" }}
+                  placeholder="e.g. Make a batch of stock"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </Field>
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18 }}>
+              <button type="button" style={{ ...styles.putAwayBtn, padding: "8px 13px", fontSize: 13 }} onClick={closeAddPrep}>
+                Cancel
+              </button>
+              <button type="submit" disabled={!name.trim()} style={{ ...styles.addSpendBtn, marginTop: 0, opacity: name.trim() ? 1 : 0.45 }}>
+                Save prep
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
@@ -3156,6 +3171,7 @@ function round1(n) {
 function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
   const [name, setName] = useState("");
   const [loc, setLoc] = useState("Fridge");
+  const [staple, setStaple] = useState(false);
   const [expiry, setExpiry] = useState("");
   const [lowStock, setLowStock] = useState(false);
   const fileInputRef = useRef(null);
@@ -3169,7 +3185,7 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
     const isLow = lowStock;
     onChange([
       ...list,
-      { id: uid(), name: name.trim(), location: loc, expiry: loc === "Pantry" || loc === "Supplements" ? null : expiry || null, lowStock: isLow },
+      { id: uid(), name: name.trim(), location: loc, expiry: loc === "Pantry" || loc === "Supplements" ? null : expiry || null, lowStock: isLow, staple },
     ]);
     if (isLow) {
       const already = shoppingList.some((s) => s.name.trim().toLowerCase() === name.trim().toLowerCase());
@@ -3178,9 +3194,12 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
     setName("");
     setExpiry("");
     setLowStock(false);
+    setStaple(false);
   };
   const remove = (id) => onChange(list.filter((i) => i.id !== id));
-  const moveTo = (id, location) => onChange(moveInventoryItem(list, id, location));
+  const moveTo = (id, location, isStaple) => onChange(moveInventoryItem(list, id, location, isStaple));
+  const setItemStaple = (id, isStaple) =>
+    onChange(list.map((item) => (item.id === id ? { ...item, staple: isStaple } : item)));
   const toggleLowStock = (id) => {
     const item = list.find((i) => i.id === id);
     const willBeLow = item ? !item.lowStock : false;
@@ -3224,7 +3243,7 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
         setScanError("Couldn't find any items in that photo — try a clearer shot.");
       } else {
         setScanResults(
-          items.map((n) => ({ id: uid(), name: String(n).trim(), checked: true, location: "Fridge" }))
+          items.map((n) => ({ id: uid(), name: String(n).trim(), checked: true, location: "Fridge", staple: false }))
         );
       }
     } catch (err) {
@@ -3239,6 +3258,8 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
     setScanResults((prev) => prev.map((i) => (i.id === id ? { ...i, checked: !i.checked } : i)));
   const setScanItemLocation = (id, location) =>
     setScanResults((prev) => prev.map((i) => (i.id === id ? { ...i, location } : i)));
+  const setScanItemStaple = (id, isStaple) =>
+    setScanResults((prev) => prev.map((i) => (i.id === id ? { ...i, staple: isStaple } : i)));
   const setScanItemName = (id, newName) =>
     setScanResults((prev) => prev.map((i) => (i.id === id ? { ...i, name: newName } : i)));
   const removeScanItem = (id) => setScanResults((prev) => prev.filter((i) => i.id !== id));
@@ -3246,7 +3267,7 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
   const confirmScanResults = () => {
     const toAdd = scanResults
       .filter((i) => i.checked && i.name.trim())
-      .map((i) => ({ id: uid(), name: i.name.trim(), location: i.location, expiry: null, lowStock: false }));
+      .map((i) => ({ id: uid(), name: i.name.trim(), location: i.location, expiry: null, lowStock: false, staple: i.staple }));
     if (toAdd.length > 0) onChange([...list, ...toAdd]);
     setScanResults(null);
   };
@@ -3331,6 +3352,15 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
                       </button>
                     ))}
                   </div>
+                  <select
+                    aria-label={`Type for ${item.name}`}
+                    style={{ ...styles.select, padding: "4px 7px", fontSize: 11 }}
+                    value={item.staple ? "staple" : "non-staple"}
+                    onChange={(e) => setScanItemStaple(item.id, e.target.value === "staple")}
+                  >
+                    <option value="staple">Staple</option>
+                    <option value="non-staple">Non-staple</option>
+                  </select>
                   <button style={styles.xBtn} onClick={() => removeScanItem(item.id)}>
                     <X size={14} />
                   </button>
@@ -3357,6 +3387,10 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
           <option>Pantry</option>
           <option>Supplements</option>
         </select>
+        <select aria-label="Item type" style={styles.select} value={staple ? "staple" : "non-staple"} onChange={(e) => setStaple(e.target.value === "staple")}>
+          <option value="staple">Staple</option>
+          <option value="non-staple">Non-staple</option>
+        </select>
         <IconBtn onClick={add} />
       </AddRow>
       <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -3376,7 +3410,7 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
         </button>
       </div>
 
-      <InventoryGroup title="Fridge" icon={Refrigerator} items={fridge} onRemove={remove} onToggleLowStock={toggleLowStock} />
+      <InventoryGroup title="Fridge" icon={Refrigerator} items={fridge} onRemove={remove} onToggleLowStock={toggleLowStock} onSetStaple={setItemStaple} />
       {recent.length > 0 && (
         <InventoryGroup
           title={RECENT_SHOP}
@@ -3385,16 +3419,17 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
           onRemove={remove}
           onToggleLowStock={toggleLowStock}
           onMove={moveTo}
+          onSetStaple={setItemStaple}
         />
       )}
-      <InventoryGroup title="Freezer" icon={Snowflake} items={freezer} onRemove={remove} onToggleLowStock={toggleLowStock} />
-      <InventoryGroup title="Pantry" icon={Package} items={pantry} onRemove={remove} onToggleLowStock={toggleLowStock} />
-      <InventoryGroup title="Supplements" icon={Pill} items={supplements} onRemove={remove} onToggleLowStock={toggleLowStock} />
+      <InventoryGroup title="Freezer" icon={Snowflake} items={freezer} onRemove={remove} onToggleLowStock={toggleLowStock} onSetStaple={setItemStaple} />
+      <InventoryGroup title="Pantry" icon={Package} items={pantry} onRemove={remove} onToggleLowStock={toggleLowStock} onSetStaple={setItemStaple} />
+      <InventoryGroup title="Supplements" icon={Pill} items={supplements} onRemove={remove} onToggleLowStock={toggleLowStock} onSetStaple={setItemStaple} />
     </div>
   );
 }
 
-function InventoryGroup({ title, icon: Icon, items, onRemove, onToggleLowStock, onMove }) {
+function InventoryGroup({ title, icon: Icon, items, onRemove, onToggleLowStock, onMove, onSetStaple }) {
   const isPantry = title === "Pantry" || title === "Supplements";
   return (
     <div style={{ marginTop: 18 }}>
@@ -3414,11 +3449,26 @@ function InventoryGroup({ title, icon: Icon, items, onRemove, onToggleLowStock, 
                     {days < 0 ? "expired" : days === 0 ? "expires today" : `expires in ${days}d`}
                   </div>
                 )}
+                <select
+                  aria-label={`Type for ${i.name}`}
+                  style={{ ...styles.select, padding: "3px 7px", fontSize: 10.5, marginTop: 5 }}
+                  value={typeof i.staple === "boolean" ? (i.staple ? "staple" : "non-staple") : ""}
+                  onChange={(e) => onSetStaple(i.id, e.target.value === "staple")}
+                >
+                  <option value="" disabled>Choose type…</option>
+                  <option value="staple">Staple</option>
+                  <option value="non-staple">Non-staple</option>
+                </select>
                 {/* Fresh from the shop: say where it goes and it leaves this group. */}
                 {onMove && (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 5 }}>
                     {["Fridge", "Freezer", "Pantry", "Supplements"].map((destination) => (
-                      <button key={destination} style={styles.putAwayBtn} onClick={() => onMove(i.id, destination)}>
+                      <button
+                        key={destination}
+                        disabled={typeof i.staple !== "boolean"}
+                        style={{ ...styles.putAwayBtn, opacity: typeof i.staple === "boolean" ? 1 : 0.4 }}
+                        onClick={() => onMove(i.id, destination, i.staple)}
+                      >
                         {destination}
                       </button>
                     ))}
