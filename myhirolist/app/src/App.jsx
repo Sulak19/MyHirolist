@@ -31,6 +31,7 @@ import {
   shoppingNeeds,
   reconcileShopping,
   addSelectedMealsToShopping,
+  addSelectedMealsToPrep,
   removePrepOnlyShoppingItems,
   prepTasks,
   reconcilePrep,
@@ -291,7 +292,12 @@ function usePlanShopping(data, setData, ready) {
    enough - there is no button to press, because a list you have to remember
    to refresh is a list that goes stale. */
 function usePlanPrep(data, setData, ready) {
-  const signature = JSON.stringify([data?.weekPlan, data?.nextWeekPlan, data?.inventory?.map((i) => [i.name, i.lowStock])]);
+  const signature = JSON.stringify([
+    data?.weekPlan,
+    data?.nextWeekPlan,
+    data?.inventory?.map((i) => [i.name, i.lowStock]),
+    data?.mealPrep?.map((meal) => [meal.id, meal.name, meal.ingredients, meal.prepNotes]),
+  ]);
 
   useEffect(() => {
     if (!ready || !data) return;
@@ -299,8 +305,9 @@ function usePlanPrep(data, setData, ready) {
     const tasks = prepTasks(data.weekPlan, data.nextWeekPlan, data.mealPrep, data.batchCooking, data.inventory);
     const next = reconcilePrep(data.weekendPrep, tasks);
 
-    const before = (data.weekendPrep ?? []).map((t) => `${t.key ?? t.label}:${t.checked}`).sort().join("|");
-    const after = next.map((t) => `${t.key ?? t.label}:${t.checked}`).sort().join("|");
+    const describe = (task) => JSON.stringify([task.key ?? task.label, task.label, task.meal, task.dayOf, task.week, task.kind, task.source, task.checked]);
+    const before = (data.weekendPrep ?? []).map(describe).sort().join("|");
+    const after = next.map(describe).sort().join("|");
     if (before === after) return;
 
     setData((current) => ({
@@ -1313,20 +1320,6 @@ function PlanTab({ meals, plan, onPlanChange, planAuto, planWeek: activeWeek, on
 /* ---------------- MEALS ---------------- */
 const PROTEIN_ORDER = ["Chicken", "Beef", "Pork", "Lamb", "Fish", "Misc"];
 
-const PROTEIN_KEYWORDS = ["chicken", "beef", "pork", "lamb", "steak", "spec", "mince", "tofu", "egg", "fish", "shrimp", "sausage", "kabana", "bacon", "chorizo"];
-const SKIP_KEYWORDS = [
-  "sauce", "paste", "vinegar", "oil", "stock", "rice", "noodle", "spaghetti", "udon",
-  "powder", "gochugaru", "gochujang", "cheese", "chips", "tortilla", "bread", "spice",
-  "sour cream", "bay leaves", "tacos", "5 spice", "tinned", "coriander",
-  "rigatoni", "pasta", "parmesan", "padano", "wrap", "broth",
-];
-function classifyIngredient(ing) {
-  const lower = ing.toLowerCase();
-  if (PROTEIN_KEYWORDS.some((k) => lower.includes(k))) return "protein";
-  if (SKIP_KEYWORDS.some((k) => lower.includes(k))) return "skip";
-  return "veg";
-}
-
 /* Reads a File/Blob and redraws it through a canvas to normalize to JPEG.
    Fixes iPhone photos captured as HEIC, which the vision API rejects. */
 async function fileToJpegBase64(file, maxDim = 1600) {
@@ -1385,46 +1378,9 @@ function addMealsToShoppingList(mealsArr, shoppingList, onShoppingChange, invent
 }
 
 function addMealsToPrepList(mealsArr, prepList, onPrepChange) {
-  const existingLabels = new Set(prepList.map((t) => `${t.meal}::${t.label}`));
-  const newTasks = [];
-  mealsArr.forEach((m) => {
-    if (m.prepNotes) {
-      const label = m.prepNotes;
-      if (!existingLabels.has(`${m.name}::${label}`)) {
-        newTasks.push({ id: uid(), meal: m.name, label, checked: false });
-        existingLabels.add(`${m.name}::${label}`);
-      }
-      return;
-    }
-    const proteins = (m.ingredients || []).filter((i) => classifyIngredient(i) === "protein");
-    const vegs = (m.ingredients || []).filter((i) => classifyIngredient(i) === "veg");
-    let addedAny = false;
-    if (proteins.length) {
-      const label = `Marinate/portion protein — ${proteins.join(", ")}`;
-      if (!existingLabels.has(`${m.name}::${label}`)) {
-        newTasks.push({ id: uid(), meal: m.name, label, checked: false });
-        existingLabels.add(`${m.name}::${label}`);
-        addedAny = true;
-      }
-    }
-    if (vegs.length) {
-      const label = `Wash & chop veg — ${vegs.join(", ")}`;
-      if (!existingLabels.has(`${m.name}::${label}`)) {
-        newTasks.push({ id: uid(), meal: m.name, label, checked: false });
-        existingLabels.add(`${m.name}::${label}`);
-        addedAny = true;
-      }
-    }
-    if (!addedAny) {
-      const label = "Prep ingredients (add ingredient list on Meals tab for detail)";
-      if (!existingLabels.has(`${m.name}::${label}`)) {
-        newTasks.push({ id: uid(), meal: m.name, label, checked: false });
-        existingLabels.add(`${m.name}::${label}`);
-      }
-    }
-  });
-  if (newTasks.length > 0) onPrepChange([...prepList, ...newTasks]);
-  return newTasks.length;
+  const result = addSelectedMealsToPrep(prepList, mealsArr, uid);
+  if (result.changed) onPrepChange(result.items);
+  return result.addedCount;
 }
 
 function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, onPrepChange, inventory, selectedIds, onSelectionChange }) {
@@ -1432,6 +1388,7 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
   const [ingredients, setIngredientsDraft] = useState("");
   const [tagVals, setTagVals] = useState(new Set(["Misc"]));
   const [url, setUrl] = useState("");
+  const [prepNotes, setPrepNotes] = useState("");
   const [showAddMeal, setShowAddMeal] = useState(false);
   const selected = new Set(selectedIds);
   const setSelected = (updater) => {
@@ -1478,6 +1435,7 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
     setName("");
     setIngredientsDraft("");
     setUrl("");
+    setPrepNotes("");
     setTagVals(new Set(["Misc"]));
   };
   const closeAddMeal = () => {
@@ -1494,6 +1452,7 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
         name: name.trim(),
         tags,
         url: url.trim() || undefined,
+        prepNotes: prepNotes.trim() || undefined,
         ingredients: ingredients.split(",").map((item) => item.trim()).filter(Boolean),
       },
     ]);
@@ -1822,6 +1781,17 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
             </div>
 
             <div style={{ marginTop: 14 }}>
+              <Field label="Weekend prep (optional)">
+                <textarea
+                  style={{ ...styles.input, width: "100%", minHeight: 76, resize: "vertical" }}
+                  placeholder="e.g. Marinate chicken and freeze. Day-of: defrost and cook."
+                  value={prepNotes}
+                  onChange={(e) => setPrepNotes(e.target.value)}
+                />
+              </Field>
+            </div>
+
+            <div style={{ marginTop: 14 }}>
               <Field label="Recipe link (optional)">
                 <input
                   style={{ ...styles.input, width: "100%" }}
@@ -1864,6 +1834,7 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
    keeps the meal as a small tag, and shows how much is left. */
 function PrepTab({ list, onChange }) {
   const [name, setName] = useState("");
+  const [showAddPrep, setShowAddPrep] = useState(false);
 
   const toggle = (id) => onChange(list.map((t) => (t.id === id ? { ...t, checked: !t.checked } : t)));
   const remove = (id) => onChange(list.filter((t) => t.id !== id));
@@ -1872,6 +1843,11 @@ function PrepTab({ list, onChange }) {
     if (!name.trim()) return;
     onChange([...list, { id: uid(), meal: null, label: name.trim(), checked: false }]);
     setName("");
+    setShowAddPrep(false);
+  };
+  const closeAddPrep = () => {
+    setName("");
+    setShowAddPrep(false);
   };
 
   const open = list.filter((t) => !t.checked);
@@ -1924,7 +1900,15 @@ function PrepTab({ list, onChange }) {
 
   return (
     <div>
-      <SectionTitle>Weekend prep</SectionTitle>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
+        <h2 style={{ ...styles.h2, margin: 0 }}>Weekend prep</h2>
+        <button
+          style={{ ...styles.addSpendBtn, marginTop: 0, padding: "7px 11px", flexShrink: 0 }}
+          onClick={() => setShowAddPrep(true)}
+        >
+          <Plus size={14} /> Add prep
+        </button>
+      </div>
       <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 12 }}>
         Cutting, marinating, portioning, and making low-stock staples. Tasks appear here automatically.
       </div>
@@ -1969,18 +1953,47 @@ function PrepTab({ list, onChange }) {
         </div>
       )}
 
-      <div style={{ marginTop: 20 }}>
-        <AddRow>
-          <input
-            style={styles.input}
-            placeholder="Add your own prep task"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addManual()}
-          />
-          <IconBtn onClick={addManual} />
-        </AddRow>
-      </div>
+      {showAddPrep && (
+        <div style={styles.restoreSheet} onClick={closeAddPrep}>
+          <form
+            style={styles.restoreInner}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="add-prep-title"
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={(e) => {
+              e.preventDefault();
+              addManual();
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              <h2 id="add-prep-title" style={{ ...styles.h2, margin: 0 }}>Add a prep task</h2>
+              <button type="button" aria-label="Close add prep form" style={styles.xBtn} onClick={closeAddPrep}>
+                <X size={18} />
+              </button>
+            </div>
+            <div style={{ marginTop: 16 }}>
+              <Field label="Prep task">
+                <input
+                  autoFocus
+                  style={{ ...styles.input, width: "100%" }}
+                  placeholder="e.g. Make a batch of stock"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </Field>
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18 }}>
+              <button type="button" style={{ ...styles.putAwayBtn, padding: "8px 13px", fontSize: 13 }} onClick={closeAddPrep}>
+                Cancel
+              </button>
+              <button type="submit" disabled={!name.trim()} style={{ ...styles.addSpendBtn, marginTop: 0, opacity: name.trim() ? 1 : 0.45 }}>
+                Save prep
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
