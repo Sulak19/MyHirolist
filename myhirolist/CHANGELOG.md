@@ -1,3 +1,9 @@
+## 1.0.29
+
+Merge PR #16: Improve Today tasks and cleaning checklist
+
+Improve Today tasks and cleaning checklist
+
 ## 1.0.28
 
 Merge PR #15: Streamline weekend prep and track staples
