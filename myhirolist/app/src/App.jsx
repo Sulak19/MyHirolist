@@ -50,7 +50,7 @@ import { getToday } from "./lib/api.js";
 import { C, useTheme } from "./lib/theme.js";
 import { moveInventoryItem, withInventoryStaples } from "./lib/inventory.js";
 import { shouldShowMealPrepToday } from "./lib/today.js";
-import { sortCleaningTasks } from "./lib/cleaning.js";
+import { cleaningTaskStatus, sortCleaningTasks } from "./lib/cleaning.js";
 
 /* ---------------------------------------------------------
    Home Base — a household dashboard
@@ -2228,21 +2228,7 @@ function ShoppingRow({ item, onToggle, onRemove, showPrompt, onAddToInventory, o
 
 /* ---------------- CLEANING ---------------- */
 function isDue(task) {
-  if (task.freq === "As needed") return false;
-  if (!task.lastDone) return true;
-  const days = { Daily: 1, "Twice weekly": 3, Weekly: 7, Fortnightly: 14, Monthly: 30 }[task.freq] || 7;
-  return (new Date() - new Date(task.lastDone)) / 86400000 >= days;
-}
-
-// Returns null if not due, 0 if due exactly today, or a positive number of
-// days overdue beyond the scheduled interval.
-function daysOverdue(task) {
-  if (task.freq === "As needed") return null;
-  const freqDays = { Daily: 1, "Twice weekly": 3, Weekly: 7, Fortnightly: 14, Monthly: 30 }[task.freq] || 7;
-  if (!task.lastDone) return null; // never done — "due" but no meaningful overdue count
-  const elapsed = Math.floor((new Date() - new Date(task.lastDone)) / 86400000);
-  const over = elapsed - freqDays;
-  return over >= 0 ? over : null;
+  return cleaningTaskStatus(task).due;
 }
 
 function CleaningTab({ view, list, onChange, oddJobs, onOddJobsChange }) {
@@ -2300,11 +2286,7 @@ function CleaningTab({ view, list, onChange, oddJobs, onOddJobsChange }) {
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
         {orderedCleaning.map((t) => {
-          const due = isDue(t);
-          const overdueBy = daysOverdue(t);
-          const neverDone = due && !t.lastDone;
-          const isOverdue = due && (overdueBy > 0 || neverDone);
-          const completed = Boolean(t.lastDone) && !due;
+          const { due, overdue: isOverdue, completed, neverDone, overdueBy } = cleaningTaskStatus(t);
           return (
             <div
               key={t.id}
