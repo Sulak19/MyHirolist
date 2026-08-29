@@ -1531,12 +1531,10 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
         </button>
       </div>
 
-      <input
-        style={{ ...styles.input, width: "100%" }}
+      <SearchInput
         placeholder="Search saved meals or ingredients"
-        aria-label="Search saved meals or ingredients"
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
+        onChange={setQuery}
       />
 
       <div style={{ marginTop: 14 }}>
@@ -3734,11 +3732,10 @@ function RecipesTab({ list, onChange }) {
         )}
       </div>
 
-      <input
-        style={{ ...styles.input, width: "100%" }}
+      <SearchInput
         placeholder="Search recipes"
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
+        onChange={setQuery}
       />
 
       {groups.map((g) => (
@@ -3878,6 +3875,51 @@ function RestorePanel() {
 
 function SectionTitle({ children }) {
   return <h2 style={styles.h2}>{children}</h2>;
+}
+function SearchInput({ value, onChange, placeholder }) {
+  const inputRef = useRef(null);
+  return (
+    <div role="search" style={{ position: "relative", width: "100%" }}>
+      <input
+        ref={inputRef}
+        role="searchbox"
+        aria-label={placeholder}
+        style={{ ...styles.input, width: "100%", paddingRight: value ? 38 : 10 }}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {value && (
+        <button
+          type="button"
+          aria-label={`Clear ${placeholder.toLowerCase()}`}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => {
+            onChange("");
+            inputRef.current?.focus();
+          }}
+          style={{
+            position: "absolute",
+            right: 4,
+            top: "50%",
+            transform: "translateY(-50%)",
+            width: 30,
+            height: 30,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            border: "none",
+            borderRadius: 6,
+            background: "transparent",
+            color: C.inkFaint,
+            cursor: "pointer",
+          }}
+        >
+          <X size={15} />
+        </button>
+      )}
+    </div>
+  );
 }
 function AddRow({ children }) {
   return <div style={{ display: "flex", gap: 8 }}>{children}</div>;
