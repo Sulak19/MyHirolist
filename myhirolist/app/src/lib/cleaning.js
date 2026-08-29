@@ -14,14 +14,41 @@ function dueAt(task) {
   return Number.isNaN(lastDone) ? Number.NEGATIVE_INFINITY : lastDone + days * 86400000;
 }
 
+export function cleaningTaskStatus(task, now = new Date()) {
+  if (task?.freq === "As needed") {
+    return { due: false, overdue: false, completed: Boolean(task?.lastDone), neverDone: false, overdueBy: null };
+  }
+
+  const days = FREQUENCY_DAYS[task?.freq] ?? 7;
+  if (!task?.lastDone) {
+    return { due: true, overdue: true, completed: false, neverDone: true, overdueBy: null };
+  }
+
+  const nowMs = now instanceof Date ? now.getTime() : new Date(now).getTime();
+  const lastDone = new Date(task.lastDone).getTime();
+  if (Number.isNaN(nowMs) || Number.isNaN(lastDone)) {
+    return { due: false, overdue: false, completed: false, neverDone: false, overdueBy: null };
+  }
+
+  const elapsed = Math.floor((nowMs - lastDone) / 86400000);
+  const overdueBy = elapsed - days;
+  const due = overdueBy >= 0;
+  return {
+    due,
+    overdue: overdueBy > 0,
+    completed: !due,
+    neverDone: false,
+    overdueBy: due ? overdueBy : null,
+  };
+}
+
 export function sortCleaningTasks(tasks, now = new Date()) {
   const nowMs = now instanceof Date ? now.getTime() : new Date(now).getTime();
   const currentTime = Number.isNaN(nowMs) ? Date.now() : nowMs;
 
   const details = (task) => {
     const nextDue = dueAt(task);
-    const due = nextDue !== null && nextDue <= currentTime;
-    const completed = Boolean(task?.lastDone) && !due;
+    const { due, completed } = cleaningTaskStatus(task, new Date(currentTime));
     return {
       task,
       nextDue,
