@@ -49,6 +49,7 @@ import {
 import { getToday } from "./lib/api.js";
 import { C, useTheme } from "./lib/theme.js";
 import { moveInventoryItem, withInventoryStaples } from "./lib/inventory.js";
+import { shouldShowMealPrepToday } from "./lib/today.js";
 
 /* ---------------------------------------------------------
    Home Base — a household dashboard
@@ -767,14 +768,18 @@ function DayCards({ data, onCleaningChange, onDogTreatmentGiven, setTab }) {
 
   const dueTreatments = dueDogTreatments(data.dogTreatments, data.dogFood.dogs);
   const readyPortions = data.batchCooking.filter((b) => b.portions > 0).reduce((sum, b) => sum + b.portions, 0);
+  const showMealPrep = shouldShowMealPrepToday(data.weekendPrep);
 
   return (
     <>
       {agenda.days.map((day, index) => {
         const isToday = index === 0;
         const chores = day.chores.filter((c) => !(isToday && doneToday.has(c.refId)));
+        const todayTasks = isToday && showMealPrep
+          ? [...chores, { name: "Meal prep", refId: "meal-prep", destination: "prep" }]
+          : chores;
         const treatments = isToday ? dueTreatments : [];
-        const isEmpty = !day.dinner && chores.length === 0 && treatments.length === 0 && day.expiry.length === 0 && day.other.length === 0;
+        const isEmpty = !day.dinner && todayTasks.length === 0 && treatments.length === 0 && day.expiry.length === 0 && day.other.length === 0;
 
         return (
           <div key={day.date} style={{ ...styles.card, opacity: isToday ? 1 : 0.92 }}>
@@ -795,20 +800,24 @@ function DayCards({ data, onCleaningChange, onDogTreatmentGiven, setTab }) {
               )}
             </div>
 
-            {chores.length > 0 && (
+            {todayTasks.length > 0 && (
               <div style={{ marginTop: 12 }}>
-                <div style={styles.dayKicker}>Chores</div>
+                <div style={styles.dayKicker}>To do</div>
                 {isToday ? (
                   <div style={styles.choreWrap}>
-                    {chores.map((c) => (
-                      <button key={c.refId ?? c.name} onClick={() => c.refId && markDone(c.refId)} style={styles.choreChip}>
+                    {todayTasks.map((c) => (
+                      <button
+                        key={c.refId ?? c.name}
+                        onClick={() => c.destination ? setTab(c.destination) : c.refId && markDone(c.refId)}
+                        style={styles.choreChip}
+                      >
                         <span style={styles.choreBox} />
                         {c.name}
                       </button>
                     ))}
                   </div>
                 ) : (
-                  <div style={styles.dayList}>{chores.map((c) => c.name).join(" · ")}</div>
+                  <div style={styles.dayList}>{todayTasks.map((c) => c.name).join(" · ")}</div>
                 )}
               </div>
             )}
