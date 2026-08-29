@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { sortCleaningTasks } from "./cleaning.js";
+import { cleaningTaskStatus, sortCleaningTasks } from "./cleaning.js";
 
 const NOW = new Date("2026-08-29T12:00:00+10:00");
 
@@ -33,4 +33,29 @@ test("sorting does not mutate the saved cleaning list", () => {
   const before = JSON.stringify(tasks);
   sortCleaningTasks(tasks, NOW);
   assert.equal(JSON.stringify(tasks), before);
+});
+
+test("overdue recurring tasks receive the overdue state", () => {
+  const overdue = cleaningTaskStatus(
+    { name: "Bathroom", freq: "Weekly", lastDone: "2026-08-20T12:00:00+10:00" },
+    NOW
+  );
+  const dueToday = cleaningTaskStatus(
+    { name: "Sheets", freq: "Weekly", lastDone: "2026-08-22T12:00:00+10:00" },
+    NOW
+  );
+
+  assert.equal(overdue.overdue, true);
+  assert.equal(overdue.overdueBy, 2);
+  assert.equal(dueToday.due, true);
+  assert.equal(dueToday.overdue, false, "due today remains amber rather than red");
+});
+
+test("every newly added recurring task starts due with the red overdue state", () => {
+  for (const freq of ["Daily", "Twice weekly", "Weekly", "Fortnightly", "Monthly"]) {
+    const status = cleaningTaskStatus({ name: "New task", freq, lastDone: null }, NOW);
+    assert.equal(status.overdue, true, `${freq} task should receive the red state`);
+    assert.equal(status.neverDone, true);
+  }
+  assert.equal(cleaningTaskStatus({ name: "Flexible", freq: "As needed", lastDone: null }, NOW).overdue, false);
 });
