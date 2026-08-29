@@ -50,6 +50,7 @@ import { getToday } from "./lib/api.js";
 import { C, useTheme } from "./lib/theme.js";
 import { moveInventoryItem, withInventoryStaples } from "./lib/inventory.js";
 import { shouldShowMealPrepToday } from "./lib/today.js";
+import { sortCleaningTasks } from "./lib/cleaning.js";
 
 /* ---------------------------------------------------------
    Home Base — a household dashboard
@@ -2275,6 +2276,7 @@ function CleaningTab({ view, list, onChange, oddJobs, onOddJobsChange }) {
 
   const activeJobs = oddJobs.filter((j) => !j.done);
   const doneJobs = oddJobs.filter((j) => j.done);
+  const orderedCleaning = sortCleaningTasks(list);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -2297,7 +2299,7 @@ function CleaningTab({ view, list, onChange, oddJobs, onOddJobsChange }) {
       </AddRow>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
-        {list.map((t) => {
+        {orderedCleaning.map((t) => {
           const due = isDue(t);
           const overdueBy = daysOverdue(t);
           const neverDone = due && !t.lastDone;
@@ -2312,6 +2314,7 @@ function CleaningTab({ view, list, onChange, oddJobs, onOddJobsChange }) {
                 borderWidth: isOverdue ? 2 : 1,
                 background: isOverdue ? C.rustWash : C.card,
                 alignItems: "flex-start",
+                opacity: completed ? 0.5 : 1,
               }}
             >
               <button
