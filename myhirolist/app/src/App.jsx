@@ -2302,6 +2302,7 @@ function CleaningTab({ view, list, onChange, oddJobs, onOddJobsChange }) {
           const overdueBy = daysOverdue(t);
           const neverDone = due && !t.lastDone;
           const isOverdue = due && (overdueBy > 0 || neverDone);
+          const completed = Boolean(t.lastDone) && !due;
           return (
             <div
               key={t.id}
@@ -2310,9 +2311,19 @@ function CleaningTab({ view, list, onChange, oddJobs, onOddJobsChange }) {
                 borderColor: isOverdue ? C.rust : due ? C.mustard : C.line,
                 borderWidth: isOverdue ? 2 : 1,
                 background: isOverdue ? C.rustWash : C.card,
+                alignItems: "flex-start",
               }}
             >
-              <div>
+              <button
+                aria-label={`Mark ${t.name} done`}
+                onClick={() => markDone(t.id)}
+                style={{ ...styles.prepCheckBtn, marginTop: 2 }}
+              >
+                <span style={{ ...styles.prepBox, background: completed ? C.teal : "transparent" }}>
+                  {completed && <Check size={11} color={C.paper} strokeWidth={3} />}
+                </span>
+              </button>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   {isOverdue && <AlertTriangle size={15} color={C.rust} strokeWidth={2.5} />}
                   <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 15 }}>{t.name}</div>
@@ -2330,14 +2341,9 @@ function CleaningTab({ view, list, onChange, oddJobs, onOddJobsChange }) {
                   {due && !isOverdue && <span style={{ color: C.mustard, fontWeight: 700 }}> · due today</span>}
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 6 }}>
-                <button style={styles.doneBtn} onClick={() => markDone(t.id)}>
-                  <Check size={13} />
-                </button>
-                <button style={styles.xBtn} onClick={() => remove(t.id)}>
-                  <X size={14} />
-                </button>
-              </div>
+              <button style={styles.xBtn} onClick={() => remove(t.id)}>
+                <X size={14} />
+              </button>
             </div>
           );
         })}
@@ -4246,18 +4252,6 @@ const buildStyles = () => ({
     display: "flex",
   },
   xBtnGhost: { background: "none", border: "none", color: C.lineSoft, cursor: "pointer", display: "flex" },
-  doneBtn: {
-    background: C.sage,
-    border: "none",
-    borderRadius: 6,
-    color: C.paper,
-    width: 26,
-    height: 26,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    cursor: "pointer",
-  },
   stepBtn: {
     width: 28,
     height: 28,
