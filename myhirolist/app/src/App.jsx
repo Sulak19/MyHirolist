@@ -49,6 +49,8 @@ import {
 import { getToday } from "./lib/api.js";
 import { C, useTheme } from "./lib/theme.js";
 import { moveInventoryItem, withInventoryStaples } from "./lib/inventory.js";
+import { shouldShowMealPrepToday } from "./lib/today.js";
+import { cleaningTaskStatus, sortCleaningTasks } from "./lib/cleaning.js";
 
 /* ---------------------------------------------------------
    Home Base — a household dashboard
@@ -767,14 +769,18 @@ function DayCards({ data, onCleaningChange, onDogTreatmentGiven, setTab }) {
 
   const dueTreatments = dueDogTreatments(data.dogTreatments, data.dogFood.dogs);
   const readyPortions = data.batchCooking.filter((b) => b.portions > 0).reduce((sum, b) => sum + b.portions, 0);
+  const showMealPrep = shouldShowMealPrepToday(data.weekendPrep);
 
   return (
     <>
       {agenda.days.map((day, index) => {
         const isToday = index === 0;
         const chores = day.chores.filter((c) => !(isToday && doneToday.has(c.refId)));
+        const todayTasks = isToday && showMealPrep
+          ? [...chores, { name: "Meal prep", refId: "meal-prep", destination: "prep" }]
+          : chores;
         const treatments = isToday ? dueTreatments : [];
-        const isEmpty = !day.dinner && chores.length === 0 && treatments.length === 0 && day.expiry.length === 0 && day.other.length === 0;
+        const isEmpty = !day.dinner && todayTasks.length === 0 && treatments.length === 0 && day.expiry.length === 0 && day.other.length === 0;
 
         return (
           <div key={day.date} style={{ ...styles.card, opacity: isToday ? 1 : 0.92 }}>
@@ -795,20 +801,24 @@ function DayCards({ data, onCleaningChange, onDogTreatmentGiven, setTab }) {
               )}
             </div>
 
-            {chores.length > 0 && (
+            {todayTasks.length > 0 && (
               <div style={{ marginTop: 12 }}>
-                <div style={styles.dayKicker}>Chores</div>
+                <div style={styles.dayKicker}>To do</div>
                 {isToday ? (
                   <div style={styles.choreWrap}>
-                    {chores.map((c) => (
-                      <button key={c.refId ?? c.name} onClick={() => c.refId && markDone(c.refId)} style={styles.choreChip}>
+                    {todayTasks.map((c) => (
+                      <button
+                        key={c.refId ?? c.name}
+                        onClick={() => c.destination ? setTab(c.destination) : c.refId && markDone(c.refId)}
+                        style={styles.choreChip}
+                      >
                         <span style={styles.choreBox} />
                         {c.name}
                       </button>
                     ))}
                   </div>
                 ) : (
-                  <div style={styles.dayList}>{chores.map((c) => c.name).join(" · ")}</div>
+                  <div style={styles.dayList}>{todayTasks.map((c) => c.name).join(" · ")}</div>
                 )}
               </div>
             )}
@@ -1521,12 +1531,10 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
         </button>
       </div>
 
-      <input
-        style={{ ...styles.input, width: "100%" }}
+      <SearchInput
         placeholder="Search saved meals or ingredients"
-        aria-label="Search saved meals or ingredients"
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
+        onChange={setQuery}
       />
 
       <div style={{ marginTop: 14 }}>
@@ -2218,21 +2226,7 @@ function ShoppingRow({ item, onToggle, onRemove, showPrompt, onAddToInventory, o
 
 /* ---------------- CLEANING ---------------- */
 function isDue(task) {
-  if (task.freq === "As needed") return false;
-  if (!task.lastDone) return true;
-  const days = { Daily: 1, "Twice weekly": 3, Weekly: 7, Fortnightly: 14, Monthly: 30 }[task.freq] || 7;
-  return (new Date() - new Date(task.lastDone)) / 86400000 >= days;
-}
-
-// Returns null if not due, 0 if due exactly today, or a positive number of
-// days overdue beyond the scheduled interval.
-function daysOverdue(task) {
-  if (task.freq === "As needed") return null;
-  const freqDays = { Daily: 1, "Twice weekly": 3, Weekly: 7, Fortnightly: 14, Monthly: 30 }[task.freq] || 7;
-  if (!task.lastDone) return null; // never done — "due" but no meaningful overdue count
-  const elapsed = Math.floor((new Date() - new Date(task.lastDone)) / 86400000);
-  const over = elapsed - freqDays;
-  return over >= 0 ? over : null;
+  return cleaningTaskStatus(task).due;
 }
 
 function CleaningTab({ view, list, onChange, oddJobs, onOddJobsChange }) {
@@ -2266,6 +2260,7 @@ function CleaningTab({ view, list, onChange, oddJobs, onOddJobsChange }) {
 
   const activeJobs = oddJobs.filter((j) => !j.done);
   const doneJobs = oddJobs.filter((j) => j.done);
+  const orderedCleaning = sortCleaningTasks(list);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -2288,11 +2283,8 @@ function CleaningTab({ view, list, onChange, oddJobs, onOddJobsChange }) {
       </AddRow>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
-        {list.map((t) => {
-          const due = isDue(t);
-          const overdueBy = daysOverdue(t);
-          const neverDone = due && !t.lastDone;
-          const isOverdue = due && (overdueBy > 0 || neverDone);
+        {orderedCleaning.map((t) => {
+          const { due, overdue: isOverdue, completed, neverDone, overdueBy } = cleaningTaskStatus(t);
           return (
             <div
               key={t.id}
@@ -2301,9 +2293,20 @@ function CleaningTab({ view, list, onChange, oddJobs, onOddJobsChange }) {
                 borderColor: isOverdue ? C.rust : due ? C.mustard : C.line,
                 borderWidth: isOverdue ? 2 : 1,
                 background: isOverdue ? C.rustWash : C.card,
+                alignItems: "flex-start",
+                opacity: completed ? 0.65 : 1,
               }}
             >
-              <div>
+              <button
+                aria-label={`Mark ${t.name} done`}
+                onClick={() => markDone(t.id)}
+                style={{ ...styles.prepCheckBtn, marginTop: 2 }}
+              >
+                <span style={{ ...styles.prepBox, background: completed ? C.teal : "transparent" }}>
+                  {completed && <Check size={11} color={C.paper} strokeWidth={3} />}
+                </span>
+              </button>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   {isOverdue && <AlertTriangle size={15} color={C.rust} strokeWidth={2.5} />}
                   <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 15 }}>{t.name}</div>
@@ -2321,14 +2324,9 @@ function CleaningTab({ view, list, onChange, oddJobs, onOddJobsChange }) {
                   {due && !isOverdue && <span style={{ color: C.mustard, fontWeight: 700 }}> · due today</span>}
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 6 }}>
-                <button style={styles.doneBtn} onClick={() => markDone(t.id)}>
-                  <Check size={13} />
-                </button>
-                <button style={styles.xBtn} onClick={() => remove(t.id)}>
-                  <X size={14} />
-                </button>
-              </div>
+              <button style={styles.xBtn} onClick={() => remove(t.id)}>
+                <X size={14} />
+              </button>
             </div>
           );
         })}
@@ -3734,11 +3732,10 @@ function RecipesTab({ list, onChange }) {
         )}
       </div>
 
-      <input
-        style={{ ...styles.input, width: "100%" }}
+      <SearchInput
         placeholder="Search recipes"
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
+        onChange={setQuery}
       />
 
       {groups.map((g) => (
@@ -3878,6 +3875,51 @@ function RestorePanel() {
 
 function SectionTitle({ children }) {
   return <h2 style={styles.h2}>{children}</h2>;
+}
+function SearchInput({ value, onChange, placeholder }) {
+  const inputRef = useRef(null);
+  return (
+    <div role="search" style={{ position: "relative", width: "100%" }}>
+      <input
+        ref={inputRef}
+        role="searchbox"
+        aria-label={placeholder}
+        style={{ ...styles.input, width: "100%", paddingRight: value ? 38 : 10 }}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {value && (
+        <button
+          type="button"
+          aria-label={`Clear ${placeholder.toLowerCase()}`}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => {
+            onChange("");
+            inputRef.current?.focus();
+          }}
+          style={{
+            position: "absolute",
+            right: 4,
+            top: "50%",
+            transform: "translateY(-50%)",
+            width: 30,
+            height: 30,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            border: "none",
+            borderRadius: 6,
+            background: "transparent",
+            color: C.inkFaint,
+            cursor: "pointer",
+          }}
+        >
+          <X size={15} />
+        </button>
+      )}
+    </div>
+  );
 }
 function AddRow({ children }) {
   return <div style={{ display: "flex", gap: 8 }}>{children}</div>;
@@ -4237,18 +4279,6 @@ const buildStyles = () => ({
     display: "flex",
   },
   xBtnGhost: { background: "none", border: "none", color: C.lineSoft, cursor: "pointer", display: "flex" },
-  doneBtn: {
-    background: C.sage,
-    border: "none",
-    borderRadius: 6,
-    color: C.paper,
-    width: 26,
-    height: 26,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    cursor: "pointer",
-  },
   stepBtn: {
     width: 28,
     height: 28,
