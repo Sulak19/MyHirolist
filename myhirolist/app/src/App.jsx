@@ -2314,7 +2314,7 @@ function CleaningTab({ view, list, onChange, oddJobs, onOddJobsChange }) {
                 borderWidth: isOverdue ? 2 : 1,
                 background: isOverdue ? C.rustWash : C.card,
                 alignItems: "flex-start",
-                opacity: completed ? 0.5 : 1,
+                opacity: completed ? 0.65 : 1,
               }}
             >
               <button
