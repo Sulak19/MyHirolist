@@ -1,3 +1,9 @@
+## 1.0.30
+
+Merge PR #17: Improve meal plan and meal-list actions
+
+Improve meal plan and meal-list actions
+
 ## 1.0.29
 
 Merge PR #16: Improve Today tasks and cleaning checklist
