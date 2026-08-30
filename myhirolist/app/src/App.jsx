@@ -1505,10 +1505,12 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
       return next;
     });
 
-  const addSelectedToLists = () => {
-    const chosen = list.filter((m) => selected.has(m.id));
-    addMealsToShoppingList(chosen, shoppingList, onShoppingChange, inventory);
-    addMealsToPrepList(chosen, prepList, onPrepChange);
+  const selectedMeals = () => list.filter((m) => selected.has(m.id));
+  const addSelectedToShopping = () => {
+    addMealsToShoppingList(selectedMeals(), shoppingList, onShoppingChange, inventory);
+  };
+  const addSelectedToPrep = () => {
+    addMealsToPrepList(selectedMeals(), prepList, onPrepChange);
   };
 
   const filteredList = list.filter((m) => {
@@ -1610,18 +1612,21 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
                   Recipe ↗
                 </a>
               )}
-              <div style={{ display: "flex", gap: 14, marginTop: 8 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginTop: 8 }}>
                 <button style={styles.linkBtnSmall} onClick={surpriseMe}>
                   Reroll
                 </button>
                 <button
                   style={{ ...styles.linkBtnSmall, color: C.teal }}
-                  onClick={() => {
-                    addMealsToShoppingList([randomPick], shoppingList, onShoppingChange, inventory);
-                    addMealsToPrepList([randomPick], prepList, onPrepChange);
-                  }}
+                  onClick={() => addMealsToShoppingList([randomPick], shoppingList, onShoppingChange, inventory)}
                 >
-                  Add to shopping & prep lists
+                  Add to shopping
+                </button>
+                <button
+                  style={{ ...styles.linkBtnSmall, color: C.teal }}
+                  onClick={() => addMealsToPrepList([randomPick], prepList, onPrepChange)}
+                >
+                  Add to prep
                 </button>
               </div>
             </div>
@@ -1631,8 +1636,11 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
 
       {selected.size > 0 && (
         <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
-          <button style={styles.addSpendBtn} onClick={addSelectedToLists}>
-            <ShoppingCart size={14} /> Add {selected.size} meal{selected.size === 1 ? "" : "s"} to shopping & prep lists
+          <button style={styles.addSpendBtn} onClick={addSelectedToShopping}>
+            <ShoppingCart size={14} /> Add {selected.size} to shopping
+          </button>
+          <button style={styles.addSpendBtn} onClick={addSelectedToPrep}>
+            <Scissors size={14} /> Add {selected.size} to prep
           </button>
           <button
             style={{ ...styles.linkBtnSmall, color: C.teal }}
