@@ -1,7 +1,50 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { moveInventoryItem, withInventoryStaples } from "./inventory.js";
+import { dedupeInventoryItems, dedupeShoppingItems, itemKey, moveInventoryItem, withInventoryStaples } from "./inventory.js";
+
+test("item matching ignores case, spacing, punctuation and simple plurals", () => {
+  assert.equal(itemKey("  Spring-Onions "), itemKey("spring onion"));
+  assert.equal(itemKey("2 x Tomatoes"), itemKey("tomato"));
+});
+
+test("duplicate shopping rows merge without losing meal metadata", () => {
+  const result = dedupeShoppingItems([
+    { id: "manual", name: "Onion", checked: false },
+    { id: "plan", name: "onions", checked: false, source: "plan", category: "Produce", forMeals: ["Curry"], reasons: ["meal"] },
+    { id: "second-plan", name: "ONIONS", checked: true, source: "plan", forMeals: ["Hamburg"], weeks: ["this"] },
+  ]);
+
+  assert.equal(result.length, 1);
+  assert.equal(result[0].id, "manual");
+  assert.equal(result[0].checked, false, "an active duplicate must remain unticked");
+  assert.equal(result[0].source, undefined, "a manually added item remains household-owned");
+  assert.equal(result[0].category, "Produce");
+  assert.deepEqual(result[0].forMeals, ["Curry", "Hamburg"]);
+  assert.deepEqual(result[0].reasons, ["meal"]);
+});
+
+test("stock duplicates in the same place and Recent shop are consolidated", () => {
+  const result = dedupeInventoryItems([
+    { id: "milk", name: "Milk", location: "Fridge", expiry: "2026-09-03", lowStock: true, staple: false },
+    { id: "recent", name: "milk", location: "Recent shop", expiry: null, lowStock: false, staple: null },
+    { id: "milk-two", name: "MILK", location: "Fridge", expiry: "2026-09-05", lowStock: false, staple: false },
+  ]);
+
+  assert.equal(result.length, 1);
+  assert.equal(result[0].id, "milk");
+  assert.equal(result[0].location, "Fridge");
+  assert.equal(result[0].expiry, "2026-09-03", "the earliest expiry remains useful");
+  assert.equal(result[0].lowStock, false, "a purchased copy replenishes the item");
+});
+
+test("the same stock item may intentionally live in two real locations", () => {
+  const result = dedupeInventoryItems([
+    { id: "fridge", name: "Chicken", location: "Fridge" },
+    { id: "freezer", name: "chicken", location: "Freezer" },
+  ]);
+  assert.equal(result.length, 2);
+});
 
 test("built-in kitchen items migrate as staples and other saved items do not", () => {
   const customStaple = { id: "custom", name: "Oats", staple: true };

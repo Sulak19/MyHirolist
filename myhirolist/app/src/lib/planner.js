@@ -10,6 +10,8 @@
 // available to assume for a later meal. That needs no extra data entry and is
 // close enough for a household.
 
+import { dedupeShoppingItems, itemKey } from "./inventory.js";
+
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
 const norm = (value) => String(value ?? "").trim().toLowerCase();
@@ -101,7 +103,12 @@ export function committedIngredients(plans, meals, batches) {
   const committed = new Set();
   for (const plan of asArray(plans)) {
     for (const { meal } of resolvePlanned(plan, meals, batches)) {
-      for (const ingredient of asArray(meal?.ingredients)) committed.add(norm(ingredient));
+      for (const ingredient of asArray(meal?.ingredients)) {
+        // Keep the original normalized spelling for callers that display or
+        // inspect the set, plus the shared identity key used for matching.
+        committed.add(norm(ingredient));
+        committed.add(itemKey(ingredient));
+      }
     }
   }
   return committed;
@@ -112,7 +119,7 @@ export function committedIngredients(plans, meals, batches) {
 export function availableStock(inventory, committed = new Set()) {
   const available = new Set();
   for (const item of asArray(inventory)) {
-    const key = norm(item?.name);
+    const key = itemKey(item?.name);
     if (!key || item.lowStock || committed.has(key)) continue;
     available.add(key);
   }
@@ -273,7 +280,7 @@ export function shoppingNeeds(weeks, meals, batches, inventory) {
   const needs = new Map();
 
   const add = (rawName, { category, meal, week, reason }) => {
-    const key = norm(rawName);
+    const key = itemKey(rawName);
     if (!key) return;
 
     let need = needs.get(key);
@@ -314,7 +321,7 @@ export function shoppingNeeds(weeks, meals, batches, inventory) {
 
     for (const { meal } of resolvePlanned(plan, meals, batches)) {
       for (const ingredient of asArray(meal?.ingredients)) {
-        if (stocked.has(norm(ingredient))) continue;
+        if (stocked.has(itemKey(ingredient))) continue;
         if (prepOnly.has(norm(ingredient))) continue;
         add(ingredient, { meal: meal.name, week, reason: "meal" });
       }
@@ -336,13 +343,13 @@ export function shoppingNeeds(weeks, meals, batches, inventory) {
  * meal metadata as planned ingredients.
  */
 export function addSelectedMealsToShopping(shopping, meals, inventory, createId = () => undefined) {
-  const existing = [...asArray(shopping)];
+  const existing = [...dedupeShoppingItems(shopping)];
   const added = [];
   const byName = new Map();
   let changed = false;
 
   for (const item of existing) {
-    const key = norm(item?.name);
+    const key = itemKey(item?.name);
     if (key && !byName.has(key)) byName.set(key, item);
   }
 
@@ -363,7 +370,7 @@ export function addSelectedMealsToShopping(shopping, meals, inventory, createId 
     if (!mealName) continue;
 
     for (const ingredient of asArray(meal?.ingredients)) {
-      const key = norm(ingredient);
+      const key = itemKey(ingredient);
       if (!key || stocked.has(key) || prepOnly.has(key)) continue;
 
       const current = byName.get(key);
@@ -434,15 +441,15 @@ export function locationCategory(location) {
  * legitimately later.
  */
 export function reconcileShopping(shopping, needs, dismissed = []) {
-  const list = asArray(shopping);
-  const needed = new Map(needs.map((need) => [norm(need.name), need]));
-  const dismissedSet = new Set(asArray(dismissed).map(norm));
+  const list = dedupeShoppingItems(shopping);
+  const needed = new Map(needs.map((need) => [itemKey(need.name), need]));
+  const dismissedSet = new Set(asArray(dismissed).map(itemKey));
 
   const kept = [];
   const seen = new Set();
 
   for (const item of list) {
-    const key = norm(item?.name);
+    const key = itemKey(item?.name);
     const fromPlan = item?.source === "plan";
 
     if (!fromPlan) {
