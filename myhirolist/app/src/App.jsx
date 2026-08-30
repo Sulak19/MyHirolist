@@ -554,7 +554,6 @@ export default function HomeBase() {
             onShoppingChange={(v) => update("shopping", v)}
             prepList={data.weekendPrep}
             onPrepChange={(v) => update("weekendPrep", v)}
-            selectedMealIds={data.mealSelection}
             batchList={data.batchCooking}
             onBatchChange={(v) => update("batchCooking", v)}
             inventory={data.inventory}
@@ -1080,7 +1079,7 @@ function TapSelect({ value, options, onChange, placeholder, disabled }) {
   );
 }
 
-function PlanTab({ meals, plan, onPlanChange, planAuto, planWeek: activeWeek, onPlanWeekChange, otherWeekPlan, thisWeekPlan, nextWeekPlan, mealHistory, shoppingList, onShoppingChange, prepList, onPrepChange, selectedMealIds, batchList, onBatchChange, inventory }) {
+function PlanTab({ meals, plan, onPlanChange, planAuto, planWeek: activeWeek, onPlanWeekChange, otherWeekPlan, thisWeekPlan, nextWeekPlan, mealHistory, shoppingList, onShoppingChange, prepList, onPrepChange, batchList, onBatchChange, inventory }) {
   const planContext = { meals, batches: batchList, inventory, mealHistory, otherWeekPlan };
 
   // Suggests rather than decides: the empty days get a proposal each, which
@@ -1133,7 +1132,6 @@ function PlanTab({ meals, plan, onPlanChange, planAuto, planWeek: activeWeek, on
     onPlanChange(next, auto);
   };
 
-  const selectedMeals = selectedMealIds.map((id) => meals.find((m) => m.id === id)).filter(Boolean);
   const [suggestions, setSuggestions] = useState({}); // day -> { type: 'batch'|'meal', batchId?, mealId?, label, tag? }
 
   const setDay = (day, mealId) => setDayAndReplan(day, mealId);
@@ -1254,7 +1252,7 @@ function PlanTab({ meals, plan, onPlanChange, planAuto, planWeek: activeWeek, on
         <Shuffle size={14} /> Suggest for the empty days
       </button>
       <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 12 }}>
-        Empty days auto-suggest from batch portions first, then what's in stock — pick your own from the shortlist anytime.
+        Empty days auto-suggest from batch portions first, then what's in stock — or choose any saved meal for any day.
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -1270,18 +1268,23 @@ function PlanTab({ meals, plan, onPlanChange, planAuto, planWeek: activeWeek, on
                     <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 15 }}>{batch.name}</div>
                     <div style={{ fontSize: 11.5, color: C.sage, marginTop: 2 }}>from the freezer</div>
                   </div>
-                  <button style={styles.xBtn} onClick={() => setDay(day, null)}>
+                  <button aria-label={`Clear ${day}'s meal`} style={styles.xBtn} onClick={() => setDay(day, null)}>
                     <X size={14} />
                   </button>
                 </div>
               ) : meal ? (
-                <div>
-                  <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 15 }}>{meal.name}</div>
-                  {meal.url && (
-                    <a href={meal.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: C.teal, marginTop: 4, display: "inline-block" }}>
-                      Recipe ↗
-                    </a>
-                  )}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+                  <div>
+                    <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 15 }}>{meal.name}</div>
+                    {meal.url && (
+                      <a href={meal.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: C.teal, marginTop: 4, display: "inline-block" }}>
+                        Recipe ↗
+                      </a>
+                    )}
+                  </div>
+                  <button aria-label={`Clear ${day}'s meal`} style={styles.xBtn} onClick={() => setDay(day, null)}>
+                    <X size={14} />
+                  </button>
                 </div>
               ) : suggestion ? (
                 <div>
@@ -1304,17 +1307,17 @@ function PlanTab({ meals, plan, onPlanChange, planAuto, planWeek: activeWeek, on
                 <div style={{ fontSize: 13, color: C.inkFaint, fontStyle: "italic" }}>No suggestion available</div>
               )}
 
-              {!batch && (
-                <div style={{ marginTop: 10 }}>
-                  <TapSelect
-                    value={meal ? meal.id : ""}
-                    options={selectedMeals.map((m) => ({ value: m.id, label: m.name }))}
-                    onChange={(v) => setDay(day, v)}
-                    placeholder="Or pick from your checked meals —"
-                    disabled={selectedMeals.length === 0}
-                  />
-                </div>
-              )}
+              <div style={{ marginTop: 10 }}>
+                <TapSelect
+                  value={meal ? meal.id : ""}
+                  options={[...meals]
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((savedMeal) => ({ value: savedMeal.id, label: savedMeal.name }))}
+                  onChange={(v) => setDay(day, v)}
+                  placeholder={meals.length === 0 ? "Add a saved meal first" : "Choose any saved meal —"}
+                  disabled={meals.length === 0}
+                />
+              </div>
             </div>
           );
         })}
