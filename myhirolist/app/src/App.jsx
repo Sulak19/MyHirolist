@@ -554,7 +554,6 @@ export default function HomeBase() {
             onShoppingChange={(v) => update("shopping", v)}
             prepList={data.weekendPrep}
             onPrepChange={(v) => update("weekendPrep", v)}
-            selectedMealIds={data.mealSelection}
             batchList={data.batchCooking}
             onBatchChange={(v) => update("batchCooking", v)}
             inventory={data.inventory}
@@ -1080,7 +1079,7 @@ function TapSelect({ value, options, onChange, placeholder, disabled }) {
   );
 }
 
-function PlanTab({ meals, plan, onPlanChange, planAuto, planWeek: activeWeek, onPlanWeekChange, otherWeekPlan, thisWeekPlan, nextWeekPlan, mealHistory, shoppingList, onShoppingChange, prepList, onPrepChange, selectedMealIds, batchList, onBatchChange, inventory }) {
+function PlanTab({ meals, plan, onPlanChange, planAuto, planWeek: activeWeek, onPlanWeekChange, otherWeekPlan, thisWeekPlan, nextWeekPlan, mealHistory, shoppingList, onShoppingChange, prepList, onPrepChange, batchList, onBatchChange, inventory }) {
   const planContext = { meals, batches: batchList, inventory, mealHistory, otherWeekPlan };
 
   // Suggests rather than decides: the empty days get a proposal each, which
@@ -1133,7 +1132,6 @@ function PlanTab({ meals, plan, onPlanChange, planAuto, planWeek: activeWeek, on
     onPlanChange(next, auto);
   };
 
-  const selectedMeals = selectedMealIds.map((id) => meals.find((m) => m.id === id)).filter(Boolean);
   const [suggestions, setSuggestions] = useState({}); // day -> { type: 'batch'|'meal', batchId?, mealId?, label, tag? }
 
   const setDay = (day, mealId) => setDayAndReplan(day, mealId);
@@ -1149,7 +1147,14 @@ function PlanTab({ meals, plan, onPlanChange, planAuto, planWeek: activeWeek, on
     const meal = meals.find((m) => m.id === id) || null;
     return { day, meal, batch: null };
   });
-  const plannedMeals = dayAssignments.map((d) => d.meal).filter(Boolean);
+  const plannedMeals = [...new Map(dayAssignments.filter((assignment) => assignment.meal).map((assignment) => [assignment.meal.id, assignment.meal])).values()];
+
+  const addPlanToShopping = () => {
+    addMealsToShoppingList(plannedMeals, shoppingList, onShoppingChange, inventory);
+  };
+  const addPlanToPrep = () => {
+    addMealsToPrepList(plannedMeals, prepList, onPrepChange);
+  };
 
   // Generate suggestions for empty days: batch portions first, then meals matching proteins in stock, then any meal.
   useEffect(() => {
@@ -1254,7 +1259,7 @@ function PlanTab({ meals, plan, onPlanChange, planAuto, planWeek: activeWeek, on
         <Shuffle size={14} /> Suggest for the empty days
       </button>
       <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 12 }}>
-        Empty days auto-suggest from batch portions first, then what's in stock — pick your own from the shortlist anytime.
+        Empty days auto-suggest from batch portions first, then what's in stock — or choose any saved meal for any day.
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -1270,18 +1275,23 @@ function PlanTab({ meals, plan, onPlanChange, planAuto, planWeek: activeWeek, on
                     <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 15 }}>{batch.name}</div>
                     <div style={{ fontSize: 11.5, color: C.sage, marginTop: 2 }}>from the freezer</div>
                   </div>
-                  <button style={styles.xBtn} onClick={() => setDay(day, null)}>
+                  <button aria-label={`Clear ${day}'s meal`} style={styles.xBtn} onClick={() => setDay(day, null)}>
                     <X size={14} />
                   </button>
                 </div>
               ) : meal ? (
-                <div>
-                  <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 15 }}>{meal.name}</div>
-                  {meal.url && (
-                    <a href={meal.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: C.teal, marginTop: 4, display: "inline-block" }}>
-                      Recipe ↗
-                    </a>
-                  )}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+                  <div>
+                    <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 15 }}>{meal.name}</div>
+                    {meal.url && (
+                      <a href={meal.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: C.teal, marginTop: 4, display: "inline-block" }}>
+                        Recipe ↗
+                      </a>
+                    )}
+                  </div>
+                  <button aria-label={`Clear ${day}'s meal`} style={styles.xBtn} onClick={() => setDay(day, null)}>
+                    <X size={14} />
+                  </button>
                 </div>
               ) : suggestion ? (
                 <div>
@@ -1304,26 +1314,36 @@ function PlanTab({ meals, plan, onPlanChange, planAuto, planWeek: activeWeek, on
                 <div style={{ fontSize: 13, color: C.inkFaint, fontStyle: "italic" }}>No suggestion available</div>
               )}
 
-              {!batch && (
-                <div style={{ marginTop: 10 }}>
-                  <TapSelect
-                    value={meal ? meal.id : ""}
-                    options={selectedMeals.map((m) => ({ value: m.id, label: m.name }))}
-                    onChange={(v) => setDay(day, v)}
-                    placeholder="Or pick from your checked meals —"
-                    disabled={selectedMeals.length === 0}
-                  />
-                </div>
-              )}
+              <div style={{ marginTop: 10 }}>
+                <TapSelect
+                  value={meal ? meal.id : ""}
+                  options={[...meals]
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((savedMeal) => ({ value: savedMeal.id, label: savedMeal.name }))}
+                  onChange={(v) => setDay(day, v)}
+                  placeholder={meals.length === 0 ? "Add a saved meal first" : "Choose any saved meal —"}
+                  disabled={meals.length === 0}
+                />
+              </div>
             </div>
           );
         })}
       </div>
 
       {plannedMeals.length > 0 && (
-        <div style={styles.planFootnote}>
-          Shopping and weekend prep follow this plan on their own.
-        </div>
+        <>
+          <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, marginTop: 14 }}>
+            <button style={{ ...styles.addSpendBtn, marginTop: 0 }} onClick={addPlanToShopping}>
+              <ShoppingCart size={14} /> Add {plannedMeals.length} to shopping
+            </button>
+            <button style={{ ...styles.addSpendBtn, marginTop: 0 }} onClick={addPlanToPrep}>
+              <Scissors size={14} /> Add {plannedMeals.length} to prep
+            </button>
+          </div>
+          <div style={styles.planFootnote}>
+            Repeated taps update existing entries rather than adding duplicates.
+          </div>
+        </>
       )}
     </div>
   );
@@ -1502,10 +1522,12 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
       return next;
     });
 
-  const addSelectedToLists = () => {
-    const chosen = list.filter((m) => selected.has(m.id));
-    addMealsToShoppingList(chosen, shoppingList, onShoppingChange, inventory);
-    addMealsToPrepList(chosen, prepList, onPrepChange);
+  const selectedMeals = () => list.filter((m) => selected.has(m.id));
+  const addSelectedToShopping = () => {
+    addMealsToShoppingList(selectedMeals(), shoppingList, onShoppingChange, inventory);
+  };
+  const addSelectedToPrep = () => {
+    addMealsToPrepList(selectedMeals(), prepList, onPrepChange);
   };
 
   const filteredList = list.filter((m) => {
@@ -1607,18 +1629,21 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
                   Recipe ↗
                 </a>
               )}
-              <div style={{ display: "flex", gap: 14, marginTop: 8 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginTop: 8 }}>
                 <button style={styles.linkBtnSmall} onClick={surpriseMe}>
                   Reroll
                 </button>
                 <button
                   style={{ ...styles.linkBtnSmall, color: C.teal }}
-                  onClick={() => {
-                    addMealsToShoppingList([randomPick], shoppingList, onShoppingChange, inventory);
-                    addMealsToPrepList([randomPick], prepList, onPrepChange);
-                  }}
+                  onClick={() => addMealsToShoppingList([randomPick], shoppingList, onShoppingChange, inventory)}
                 >
-                  Add to shopping & prep lists
+                  Add to shopping
+                </button>
+                <button
+                  style={{ ...styles.linkBtnSmall, color: C.teal }}
+                  onClick={() => addMealsToPrepList([randomPick], prepList, onPrepChange)}
+                >
+                  Add to prep
                 </button>
               </div>
             </div>
@@ -1628,8 +1653,11 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
 
       {selected.size > 0 && (
         <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
-          <button style={styles.addSpendBtn} onClick={addSelectedToLists}>
-            <ShoppingCart size={14} /> Add {selected.size} meal{selected.size === 1 ? "" : "s"} to shopping & prep lists
+          <button style={styles.addSpendBtn} onClick={addSelectedToShopping}>
+            <ShoppingCart size={14} /> Add {selected.size} to shopping
+          </button>
+          <button style={styles.addSpendBtn} onClick={addSelectedToPrep}>
+            <Scissors size={14} /> Add {selected.size} to prep
           </button>
           <button
             style={{ ...styles.linkBtnSmall, color: C.teal }}
