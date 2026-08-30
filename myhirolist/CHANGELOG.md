@@ -1,3 +1,9 @@
+## 1.0.31
+
+Merge PR #18: Prevent duplicate shopping and stock items
+
+Prevent duplicate shopping and stock items
+
 ## 1.0.30
 
 Merge PR #17: Improve meal plan and meal-list actions
