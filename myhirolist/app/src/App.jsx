@@ -1147,7 +1147,14 @@ function PlanTab({ meals, plan, onPlanChange, planAuto, planWeek: activeWeek, on
     const meal = meals.find((m) => m.id === id) || null;
     return { day, meal, batch: null };
   });
-  const plannedMeals = dayAssignments.map((d) => d.meal).filter(Boolean);
+  const plannedMeals = [...new Map(dayAssignments.filter((assignment) => assignment.meal).map((assignment) => [assignment.meal.id, assignment.meal])).values()];
+
+  const addPlanToShopping = () => {
+    addMealsToShoppingList(plannedMeals, shoppingList, onShoppingChange, inventory);
+  };
+  const addPlanToPrep = () => {
+    addMealsToPrepList(plannedMeals, prepList, onPrepChange);
+  };
 
   // Generate suggestions for empty days: batch portions first, then meals matching proteins in stock, then any meal.
   useEffect(() => {
@@ -1324,9 +1331,19 @@ function PlanTab({ meals, plan, onPlanChange, planAuto, planWeek: activeWeek, on
       </div>
 
       {plannedMeals.length > 0 && (
-        <div style={styles.planFootnote}>
-          Shopping and weekend prep follow this plan on their own.
-        </div>
+        <>
+          <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, marginTop: 14 }}>
+            <button style={{ ...styles.addSpendBtn, marginTop: 0 }} onClick={addPlanToShopping}>
+              <ShoppingCart size={14} /> Add {plannedMeals.length} to shopping
+            </button>
+            <button style={{ ...styles.addSpendBtn, marginTop: 0 }} onClick={addPlanToPrep}>
+              <Scissors size={14} /> Add {plannedMeals.length} to prep
+            </button>
+          </div>
+          <div style={styles.planFootnote}>
+            Repeated taps update existing entries rather than adding duplicates.
+          </div>
+        </>
       )}
     </div>
   );
