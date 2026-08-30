@@ -48,7 +48,7 @@ import {
 } from "./lib/dogTreatments.js";
 import { getToday } from "./lib/api.js";
 import { C, useTheme } from "./lib/theme.js";
-import { moveInventoryItem, withInventoryStaples } from "./lib/inventory.js";
+import { dedupeInventoryItems, dedupeShoppingItems, itemKey, moveInventoryItem, withInventoryStaples } from "./lib/inventory.js";
 import { shouldShowMealPrepToday } from "./lib/today.js";
 import { cleaningTaskStatus, sortCleaningTasks } from "./lib/cleaning.js";
 
@@ -238,7 +238,7 @@ async function loadState(setData, setLoaded) {
   try {
     const remote = await loadHouseholdData();
     const merged = rolloverWeeks(mergeWithDefaults(DEFAULT_DATA, remote));
-    setData({ ...merged, inventory: withInventoryStaples(merged.inventory) });
+    setData({ ...merged, shopping: dedupeShoppingItems(merged.shopping), inventory: withInventoryStaples(merged.inventory) });
   } catch (e) {
     console.error("load failed", e);
     setData({ ...DEFAULT_DATA, inventory: withInventoryStaples(DEFAULT_DATA.inventory) });
@@ -448,7 +448,7 @@ export default function HomeBase() {
     const unsubscribe = subscribeToHouseholdData((remoteData) => {
       isRemoteUpdateRef.current = true;
       const merged = rolloverWeeks(mergeWithDefaults(DEFAULT_DATA, remoteData));
-      setData({ ...merged, inventory: withInventoryStaples(merged.inventory) });
+      setData({ ...merged, shopping: dedupeShoppingItems(merged.shopping), inventory: withInventoryStaples(merged.inventory) });
     });
     return unsubscribe;
   }, []);
@@ -462,7 +462,14 @@ export default function HomeBase() {
     );
   }
 
-  const update = (key, value) => setData((d) => ({ ...d, [key]: value }));
+  const update = (key, value) => setData((d) => ({
+    ...d,
+    [key]: key === "shopping"
+      ? dedupeShoppingItems(value)
+      : key === "inventory"
+        ? dedupeInventoryItems(value)
+        : value,
+  }));
 
   return (
     <div style={styles.page}>
@@ -579,14 +586,14 @@ export default function HomeBase() {
             onChange={(v) => update("shopping", v)}
             onStocked={(item) =>
               setData((current) => {
-                const key = item.name.trim().toLowerCase();
-                const existing = (current.inventory ?? []).find((i) => i.name.trim().toLowerCase() === key);
+                const key = itemKey(item.name);
+                const existing = (current.inventory ?? []).find((i) => itemKey(i.name) === key);
 
                 // Already tracked? Then it is simply no longer running low.
                 if (existing) {
                   return {
                     ...current,
-                    inventory: current.inventory.map((i) => (i === existing ? { ...i, lowStock: false } : i)),
+                    inventory: dedupeInventoryItems(current.inventory.map((i) => (itemKey(i.name) === key ? { ...i, lowStock: false } : i))),
                   };
                 }
 
@@ -594,10 +601,10 @@ export default function HomeBase() {
                 // says whether it went to the fridge, freezer or pantry.
                 return {
                   ...current,
-                  inventory: [
+                  inventory: dedupeInventoryItems([
                     { id: uid(), name: item.name.trim(), location: RECENT_SHOP, expiry: null, lowStock: false, staple: null },
                     ...(current.inventory ?? []),
-                  ],
+                  ]),
                 };
               })
             }
@@ -2042,7 +2049,7 @@ function ShoppingTab({ list, onChange, inventory, onInventoryChange, onDismiss, 
 
   const add = () => {
     if (!name.trim()) return;
-    onChange([{ id: uid(), name: name.trim(), checked: false }, ...list]);
+    onChange(dedupeShoppingItems([{ id: uid(), name: name.trim(), checked: false }, ...list]));
     setName("");
   };
   const toggle = (id) => {
@@ -2073,7 +2080,7 @@ function ShoppingTab({ list, onChange, inventory, onInventoryChange, onDismiss, 
   // under "Other" rather than being hidden.
 
   const addToInventory = (item, location) => {
-    onInventoryChange([...inventory, { id: uid(), name: item.name, location, expiry: null, lowStock: false }]);
+    onInventoryChange(dedupeInventoryItems([...inventory, { id: uid(), name: item.name, location, expiry: null, lowStock: false }]));
     setPromptIds((prev) => {
       const next = new Set(prev);
       next.delete(item.id);
@@ -3209,12 +3216,12 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
   const add = () => {
     if (!name.trim()) return;
     const isLow = lowStock;
-    onChange([
+    onChange(dedupeInventoryItems([
       ...list,
       { id: uid(), name: name.trim(), location: loc, expiry: loc === "Pantry" || loc === "Supplements" ? null : expiry || null, lowStock: isLow, staple },
-    ]);
+    ]));
     if (isLow) {
-      const already = shoppingList.some((s) => s.name.trim().toLowerCase() === name.trim().toLowerCase());
+      const already = shoppingList.some((s) => itemKey(s.name) === itemKey(name));
       if (!already) onShoppingChange([{ id: uid(), name: name.trim(), checked: false }, ...shoppingList]);
     }
     setName("");
@@ -3231,7 +3238,7 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
     const willBeLow = item ? !item.lowStock : false;
     onChange(list.map((i) => (i.id === id ? { ...i, lowStock: !i.lowStock } : i)));
     if (willBeLow && item) {
-      const already = shoppingList.some((s) => s.name.trim().toLowerCase() === item.name.trim().toLowerCase());
+      const already = shoppingList.some((s) => itemKey(s.name) === itemKey(item.name));
       if (!already) {
         onShoppingChange([{ id: uid(), name: item.name, checked: false }, ...shoppingList]);
       }
@@ -3294,7 +3301,7 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
     const toAdd = scanResults
       .filter((i) => i.checked && i.name.trim())
       .map((i) => ({ id: uid(), name: i.name.trim(), location: i.location, expiry: null, lowStock: false, staple: i.staple }));
-    if (toAdd.length > 0) onChange([...list, ...toAdd]);
+    if (toAdd.length > 0) onChange(dedupeInventoryItems([...list, ...toAdd]));
     setScanResults(null);
   };
 
