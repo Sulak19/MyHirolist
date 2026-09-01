@@ -1,3 +1,9 @@
+## 1.0.32
+
+Merge PR #19: Keep Prep current-week and non-cooking
+
+Keep Prep current-week and non-cooking
+
 ## 1.0.31
 
 Merge PR #18: Prevent duplicate shopping and stock items
