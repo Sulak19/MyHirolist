@@ -15,6 +15,7 @@ import {
   addSelectedMealsToPrep,
   isPrepOnlyLowStock,
   removePrepOnlyShoppingItems,
+  nonCookingPrepNote,
   prepTasks,
   splitPrepNote,
   reconcilePrep,
@@ -545,16 +546,14 @@ test("a day the planner filled is marked as the app's, a manual one is not", () 
   assert.equal(auto.Tuesday, true, "the app chose Tuesday");
 });
 
-test("next week is only prepped when the meal actually freezes", () => {
+test("second-week meals never create prep tasks", () => {
   const meals = [
     { id: "freezes", name: "Hamburg", ingredients: ["beef mince"], prepNotes: "Form patties and freeze flat on a tray." },
     { id: "fresh", name: "Salad", ingredients: ["cucumber"], prepNotes: "Chop on the day, it wilts." },
   ];
   const tasks = prepTasks({}, { Monday: "freezes", Tuesday: "fresh" }, meals, []);
 
-  assert.equal(tasks.length, 1);
-  assert.match(tasks[0].label, /freeze flat/);
-  assert.equal(tasks[0].week, "next");
+  assert.deepEqual(tasks, []);
 });
 
 test("this week's prep is not labelled as cook-ahead", () => {
@@ -575,6 +574,30 @@ test("a note with no day-of half is left whole", () => {
   const { prep, dayOf } = splitPrepNote("Form patties and freeze flat.");
   assert.equal(prep, "Form patties and freeze flat.");
   assert.equal(dayOf, null);
+});
+
+test("cook-ahead instructions are removed from prep", () => {
+  const { prep } = nonCookingPrepNote(
+    "Slice beef thin, portion corn; cook rice ahead and freeze it. Day-of: sear beef and serve."
+  );
+  assert.equal(prep, "Slice beef thin, portion corn");
+});
+
+test("a cooking-only prep note falls back to non-cooking ingredient prep", () => {
+  const meals = [{ id: "m", name: "Soboro", ingredients: ["beef mince", "spinach"], prepNotes: "Cook mince; store in a container. Day-of: reheat." }];
+  const tasks = prepTasks({ Monday: "m" }, {}, meals, []);
+  assert.deepEqual(tasks.map((task) => task.label), ["Marinate & portion beef mince", "Wash & chop spinach"]);
+  assert.ok(tasks.every((task) => !/cook|reheat/i.test(task.label)));
+});
+
+test("stale generated prep for next week is removed", () => {
+  const existing = [{ id: "old", key: "old", label: "Cook ahead", week: "next", source: "plan", checked: true }];
+  assert.deepEqual(reconcilePrep(existing, []), []);
+});
+
+test("old generated cooking tasks are removed even when completed", () => {
+  const existing = [{ id: "old", key: "old", label: "Cook and freeze rice", week: "this", kind: "meal", source: "plan", checked: true }];
+  assert.deepEqual(reconcilePrep(existing, []), []);
 });
 
 test("prep tasks carry a stable key so ticks survive a replan", () => {

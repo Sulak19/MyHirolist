@@ -297,7 +297,6 @@ function usePlanShopping(data, setData, ready) {
 function usePlanPrep(data, setData, ready) {
   const signature = JSON.stringify([
     data?.weekPlan,
-    data?.nextWeekPlan,
     data?.inventory?.map((i) => [i.name, i.lowStock]),
     data?.mealPrep?.map((meal) => [meal.id, meal.name, meal.ingredients, meal.prepNotes]),
   ]);
@@ -305,7 +304,7 @@ function usePlanPrep(data, setData, ready) {
   useEffect(() => {
     if (!ready || !data) return;
 
-    const tasks = prepTasks(data.weekPlan, data.nextWeekPlan, data.mealPrep, data.batchCooking, data.inventory);
+    const tasks = prepTasks(data.weekPlan, {}, data.mealPrep, data.batchCooking, data.inventory);
     const next = reconcilePrep(data.weekendPrep, tasks);
 
     const describe = (task) => JSON.stringify([task.key ?? task.label, task.label, task.meal, task.dayOf, task.week, task.kind, task.source, task.checked]);
@@ -1826,10 +1825,10 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
             </div>
 
             <div style={{ marginTop: 14 }}>
-              <Field label="Weekend prep (optional)">
+              <Field label="Prep before cooking (optional)">
                 <textarea
                   style={{ ...styles.input, width: "100%", minHeight: 76, resize: "vertical" }}
-                  placeholder="e.g. Marinate chicken and freeze. Day-of: defrost and cook."
+                  placeholder="e.g. Dice onions and marinate chicken."
                   value={prepNotes}
                   onChange={(e) => setPrepNotes(e.target.value)}
                 />
@@ -1875,8 +1874,9 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
 
    The old version grouped by meal, which meant a heading per task and a wall
    of prose in each row - including the "day-of" half, which is not weekend
-   work at all. This version splits the two, groups by WHEN the work is for,
-   keeps the meal as a small tag, and shows how much is left. */
+   work at all. This version keeps only current-week preparation,
+   keeps the meal as a small tag, and shows how much is left. Cooking is done
+   on the day and does not appear on this screen. */
 function PrepTab({ list, onChange }) {
   const [name, setName] = useState("");
   const [showAddPrep, setShowAddPrep] = useState(false);
@@ -1898,7 +1898,6 @@ function PrepTab({ list, onChange }) {
   const open = list.filter((t) => !t.checked);
   const done = list.filter((t) => t.checked);
   const thisWeek = open.filter((t) => t.week !== "next");
-  const nextWeek = open.filter((t) => t.week === "next");
   const progress = list.length ? Math.round((done.length / list.length) * 100) : 0;
 
   const Task = ({ task }) => (
@@ -1913,10 +1912,9 @@ function PrepTab({ list, onChange }) {
         <div style={{ ...styles.prepLabel, textDecoration: task.checked ? "line-through" : "none" }}>
           {task.label}
         </div>
-        {(task.meal || task.dayOf) && (
+        {task.meal && (
           <div style={styles.prepMeta}>
             {task.meal && <span style={styles.prepMealChip}>{task.meal}</span>}
-            {task.dayOf && <span style={styles.prepDayOf}>on the night: {task.dayOf}</span>}
           </div>
         )}
       </div>
@@ -1955,7 +1953,7 @@ function PrepTab({ list, onChange }) {
         </button>
       </div>
       <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 12 }}>
-        Cutting, marinating, portioning, and making low-stock staples. Tasks appear here automatically.
+        Current-week cutting, marinating, portioning, and low-stock staple tasks. Cooking stays on the day.
       </div>
 
       {list.length > 0 && (
@@ -1970,11 +1968,6 @@ function PrepTab({ list, onChange }) {
       )}
 
       <Section title="This week" tasks={thisWeek} />
-      <Section
-        title="Cook ahead for next week"
-        hint="These freeze, so getting them out of the way now saves a weeknight."
-        tasks={nextWeek}
-      />
 
       {done.length > 0 && (
         <div style={{ marginTop: 20, opacity: 0.55 }}>
@@ -2022,7 +2015,7 @@ function PrepTab({ list, onChange }) {
                 <input
                   autoFocus
                   style={{ ...styles.input, width: "100%" }}
-                  placeholder="e.g. Make a batch of stock"
+                  placeholder="e.g. Chop vegetables or marinate chicken"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                 />

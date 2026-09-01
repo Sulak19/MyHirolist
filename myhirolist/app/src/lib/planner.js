@@ -513,10 +513,9 @@ export function reconcileShopping(shopping, needs, dismissed = []) {
 /**
  * The weekend's jobs, grouped by the work rather than by the meal.
  *
- * Prep notes usually carry two different things: what to do at the weekend,
- * and what to do on the night ("Day-of: coat in starch and fry"). Only the
- * first belongs on a weekend list, so they are split apart - the day-of half
- * travels with the task but is not what you read while prepping.
+ * Prep notes usually carry two different things: what to prepare beforehand
+ * and what to cook on the day. Only non-cooking work for the current week
+ * belongs here.
  *
  * Returns [{ key, label, dayOf, meal, week, kind }]; `key` is stable so the
  * list can be reconciled without losing which tasks are already ticked.
@@ -545,17 +544,20 @@ function mergePrepTask(tasks, task) {
 
 function collectMealPrep(tasks, meal, week) {
   if (meal.prepNotes) {
-    const { prep, dayOf } = splitPrepNote(meal.prepNotes);
-    if (!prep) return;
-    mergePrepTask(tasks, {
-      key: `meal::${meal.id}::${norm(prep)}`,
-      label: prep,
-      dayOf,
-      meal: meal.name,
-      kind: "meal",
-      week,
-    });
-    return;
+    const { prep, dayOf } = nonCookingPrepNote(meal.prepNotes);
+    if (prep) {
+      mergePrepTask(tasks, {
+        key: `meal::${meal.id}::${norm(prep)}`,
+        label: prep,
+        dayOf,
+        meal: meal.name,
+        kind: "meal",
+        week,
+      });
+      return;
+    }
+    // A note that only described cooking should not leave an empty meal.
+    // Fall back to safe ingredient preparation below.
   }
 
   for (const ingredient of asArray(meal.ingredients)) {
@@ -573,7 +575,7 @@ function collectMealPrep(tasks, meal, week) {
   }
 }
 
-export function prepTasks(thisWeekPlan, nextWeekPlan, meals, batches, inventory = []) {
+export function prepTasks(thisWeekPlan, _nextWeekPlan, meals, batches, inventory = []) {
   const tasks = new Map();
   for (const { label } of prepOnlyLowStock(inventory).values()) {
     mergePrepTask(tasks, {
@@ -587,18 +589,11 @@ export function prepTasks(thisWeekPlan, nextWeekPlan, meals, batches, inventory 
   }
 
   const seenMeals = new Set();
-  const collect = (plan, week) => {
-    for (const { meal } of resolvePlanned(plan, meals, batches)) {
-      if (!meal || seenMeals.has(meal.id)) continue;
-      // Next week is only worth touching this weekend if it actually keeps.
-      if (week === "next" && !freezesWell(meal)) continue;
-      seenMeals.add(meal.id);
-      collectMealPrep(tasks, meal, week);
-    }
-  };
-
-  collect(thisWeekPlan, "this");
-  collect(nextWeekPlan, "next");
+  for (const { meal } of resolvePlanned(thisWeekPlan, meals, batches)) {
+    if (!meal || seenMeals.has(meal.id)) continue;
+    seenMeals.add(meal.id);
+    collectMealPrep(tasks, meal, "this");
+  }
 
   return [...tasks.values()].sort((a, b) => {
     const rank = (task) => task.kind === "stock" ? 0 : task.label.startsWith("Marinate & portion") ? 1 : task.label.startsWith("Wash & chop") ? 2 : 3;
@@ -660,6 +655,42 @@ export function splitPrepNote(notes) {
   };
 }
 
+const COOKING_INSTRUCTION = /\b(?:bake|blanch|boil|braise|brown|cook|fry|grill|par[- ]?cook|poach|pressure[- ]?cook|reheat|roast|saut[eé]|sear|simmer|steam|stir[- ]?fry)\b|\bmake\b[^;.]{0,40}\b(?:sauce|cooked base)\b/i;
+
+/** Removes cook-ahead instructions while retaining chopping, marinating and
+ * other preparation. The original Day-of text is kept as metadata, but the
+ * Prep screen deliberately does not display cooking instructions. */
+export function nonCookingPrepNote(notes) {
+  const { prep, dayOf } = splitPrepNote(notes);
+  if (!COOKING_INSTRUCTION.test(prep)) return { prep, dayOf };
+
+  let removedCooking = false;
+  const clauses = prep
+    .split(/\s*(?:;|\.(?=\s|$))\s*/)
+    .map((clause) => clause.trim())
+    .filter(Boolean)
+    .map((clause) => {
+      const match = COOKING_INSTRUCTION.exec(clause);
+      if (!match) return clause;
+      removedCooking = true;
+      return clause
+        .slice(0, match.index)
+        .replace(/(?:[-—]\s*)?(?:you can even|then)?\s*$/i, "")
+        .replace(/(?:\band\b|\bthen\b|[\s,/—-])+$/i, "")
+        .trim();
+    })
+    .filter(Boolean);
+
+  const onlyStorage = clauses.length > 0 && clauses.every((clause) =>
+    /^(?:store|freeze|fridge|refrigerate|portion)\b/i.test(clause)
+  );
+
+  return {
+    prep: removedCooking && onlyStorage ? "" : clauses.join("; "),
+    dayOf,
+  };
+}
+
 /**
  * Keeps the prep list in step with the plan, the same way shopping works:
  * tasks the app derived carry source "plan" and are added and removed as the
@@ -674,6 +705,10 @@ export function reconcilePrep(existing, tasks) {
   const seenKeys = new Set();
 
   for (const item of list) {
+    // Older releases may have saved generated cook-ahead work for week two.
+    // It is no longer part of Prep, even when it was already ticked.
+    if (item?.week === "next" && item?.source) continue;
+    if (item?.source && item?.kind !== "stock" && COOKING_INSTRUCTION.test(String(item?.label ?? ""))) continue;
     if (item?.source === "selected-meals") {
       if (item.key && wanted.has(item.key)) {
         const task = wanted.get(item.key);
@@ -719,13 +754,6 @@ export function reconcilePrep(existing, tasks) {
   }
 
   return [...added, ...kept];
-}
-
-// Whether a meal is worth preparing a week early. The household's own prep
-// notes are the best signal available - most of the freezable ones say so.
-export function freezesWell(meal) {
-  const notes = norm(meal?.prepNotes);
-  return notes.includes("freez") || notes.includes("frozen");
 }
 
 const WEEKDAY_INDEX = { Monday: 0, Tuesday: 1, Wednesday: 2, Thursday: 3, Friday: 4 };
