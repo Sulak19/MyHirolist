@@ -3405,20 +3405,26 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
         )}
       </div>
 
-      <AddRow>
-        <input style={styles.input} placeholder="Item" value={name} onChange={(e) => setName(e.target.value)} />
-        <select style={styles.select} value={loc} onChange={(e) => setLoc(e.target.value)}>
+      <div style={styles.kitchenAddGrid}>
+        <input
+          aria-label="Kitchen item"
+          style={{ ...styles.input, gridColumn: "1 / -1", width: "100%", minWidth: 0, boxSizing: "border-box" }}
+          placeholder="Item"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <select aria-label="Storage location" style={{ ...styles.select, width: "100%", minWidth: 0 }} value={loc} onChange={(e) => setLoc(e.target.value)}>
           <option>Fridge</option>
           <option>Freezer</option>
           <option>Pantry</option>
           <option>Supplements</option>
         </select>
-        <select aria-label="Item type" style={styles.select} value={staple ? "staple" : "non-staple"} onChange={(e) => setStaple(e.target.value === "staple")}>
+        <select aria-label="Item type" style={{ ...styles.select, width: "100%", minWidth: 0 }} value={staple ? "staple" : "non-staple"} onChange={(e) => setStaple(e.target.value === "staple")}>
           <option value="staple">Staple</option>
           <option value="non-staple">Non-staple</option>
         </select>
         <IconBtn onClick={add} />
-      </AddRow>
+      </div>
       <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
         {loc !== "Pantry" && loc !== "Supplements" && (
           <input
@@ -4288,6 +4294,12 @@ const buildStyles = () => ({
     justifyContent: "center",
     cursor: "pointer",
     flexShrink: 0,
+  },
+  kitchenAddGrid: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr) 38px",
+    gap: 8,
+    width: "100%",
   },
   row: {
     display: "flex",
