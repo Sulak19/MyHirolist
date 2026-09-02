@@ -129,3 +129,25 @@ export function moveInventoryItem(items, id, location, staple) {
       : item
   ));
 }
+
+/** Completing a generated low-stock prep job means that homemade staple has
+ * been replenished. Unticking the task is deliberately not the same as
+ * declaring the kitchen stock low again. */
+export function clearLowStockForPrep(items, task) {
+  const legacyStockNames = new Map([
+    [itemKey("Cook & freeze rice"), "frozen rice"],
+    [itemKey("Bake bread"), "bread"],
+    [itemKey("Make garlic koji"), "garlic koji"],
+    [itemKey("Prep ginger"), "ginger"],
+  ]);
+  const stockKey = itemKey(task?.stockName || legacyStockNames.get(itemKey(task?.label)));
+  if (task?.kind !== "stock" || !stockKey || !Array.isArray(items)) return items;
+
+  let changed = false;
+  const next = items.map((item) => {
+    if (itemKey(item?.name) !== stockKey || !item?.lowStock) return item;
+    changed = true;
+    return { ...item, lowStock: false };
+  });
+  return changed ? next : items;
+}

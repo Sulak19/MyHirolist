@@ -577,10 +577,11 @@ function collectMealPrep(tasks, meal, week) {
 
 export function prepTasks(thisWeekPlan, _nextWeekPlan, meals, batches, inventory = []) {
   const tasks = new Map();
-  for (const { label } of prepOnlyLowStock(inventory).values()) {
+  for (const { key: stockName, label } of prepOnlyLowStock(inventory).values()) {
     mergePrepTask(tasks, {
       key: `stock::${norm(label)}`,
       label,
+      stockName,
       dayOf: null,
       meal: "Low stock",
       kind: "stock",
@@ -713,7 +714,7 @@ export function reconcilePrep(existing, tasks) {
       if (item.key && wanted.has(item.key)) {
         const task = wanted.get(item.key);
         const meals = [...new Set([...String(item.meal ?? "").split(", "), ...String(task.meal ?? "").split(", ")].filter(Boolean))].join(", ");
-        kept.push({ ...item, label: task.label, dayOf: task.dayOf, meal: meals, week: task.week, kind: task.kind });
+        kept.push({ ...item, label: task.label, stockName: task.stockName, dayOf: task.dayOf, meal: meals, week: task.week, kind: task.kind });
         seenKeys.add(item.key);
       } else {
         kept.push(item);
@@ -730,7 +731,7 @@ export function reconcilePrep(existing, tasks) {
 
     if (wanted.has(item.key)) {
       const task = wanted.get(item.key);
-      kept.push({ ...item, label: task.label, dayOf: task.dayOf, meal: task.meal, week: task.week, kind: task.kind });
+      kept.push({ ...item, label: task.label, stockName: task.stockName, dayOf: task.dayOf, meal: task.meal, week: task.week, kind: task.kind });
       seenKeys.add(item.key);
     } else if (item.checked && item.kind !== "stock") {
       kept.push(item); // already done - dropping it would feel like a bug
@@ -744,6 +745,7 @@ export function reconcilePrep(existing, tasks) {
     added.push({
       key,
       label: task.label,
+      stockName: task.stockName,
       dayOf: task.dayOf,
       meal: task.meal,
       week: task.week,

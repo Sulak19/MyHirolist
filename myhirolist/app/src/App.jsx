@@ -48,7 +48,7 @@ import {
 } from "./lib/dogTreatments.js";
 import { getToday } from "./lib/api.js";
 import { C, useTheme } from "./lib/theme.js";
-import { dedupeInventoryItems, dedupeShoppingItems, itemKey, moveInventoryItem, withInventoryStaples } from "./lib/inventory.js";
+import { clearLowStockForPrep, dedupeInventoryItems, dedupeShoppingItems, itemKey, moveInventoryItem, withInventoryStaples } from "./lib/inventory.js";
 import { shouldShowMealPrepToday } from "./lib/today.js";
 import { cleaningTaskStatus, sortCleaningTasks } from "./lib/cleaning.js";
 
@@ -307,7 +307,7 @@ function usePlanPrep(data, setData, ready) {
     const tasks = prepTasks(data.weekPlan, {}, data.mealPrep, data.batchCooking, data.inventory);
     const next = reconcilePrep(data.weekendPrep, tasks);
 
-    const describe = (task) => JSON.stringify([task.key ?? task.label, task.label, task.meal, task.dayOf, task.week, task.kind, task.source, task.checked]);
+    const describe = (task) => JSON.stringify([task.key ?? task.label, task.label, task.stockName, task.meal, task.dayOf, task.week, task.kind, task.source, task.checked]);
     const before = (data.weekendPrep ?? []).map(describe).sort().join("|");
     const after = next.map(describe).sort().join("|");
     if (before === after) return;
@@ -578,7 +578,18 @@ export default function HomeBase() {
             onSelectionChange={(v) => update("mealSelection", v)}
           />
         )}
-        {tab === "prep" && <PrepTab list={data.weekendPrep} onChange={(v) => update("weekendPrep", v)} />}
+        {tab === "prep" && (
+          <PrepTab
+            list={data.weekendPrep}
+            onChange={(v) => update("weekendPrep", v)}
+            onStockPrepared={(task) =>
+              setData((current) => ({
+                ...current,
+                inventory: clearLowStockForPrep(current.inventory, task),
+              }))
+            }
+          />
+        )}
         {tab === "shopping" && (
           <ShoppingTab
             list={data.shopping}
@@ -1877,11 +1888,17 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
    work at all. This version keeps only current-week preparation,
    keeps the meal as a small tag, and shows how much is left. Cooking is done
    on the day and does not appear on this screen. */
-function PrepTab({ list, onChange }) {
+function PrepTab({ list, onChange, onStockPrepared }) {
   const [name, setName] = useState("");
   const [showAddPrep, setShowAddPrep] = useState(false);
 
-  const toggle = (id) => onChange(list.map((t) => (t.id === id ? { ...t, checked: !t.checked } : t)));
+  const toggle = (id) => {
+    const task = list.find((item) => item.id === id);
+    if (!task) return;
+    const checked = !task.checked;
+    onChange(list.map((item) => (item.id === id ? { ...item, checked } : item)));
+    if (checked) onStockPrepared?.(task);
+  };
   const remove = (id) => onChange(list.filter((t) => t.id !== id));
   const clearCompleted = () => onChange(list.filter((t) => !t.checked));
   const addManual = () => {
@@ -3405,20 +3422,26 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
         )}
       </div>
 
-      <AddRow>
-        <input style={styles.input} placeholder="Item" value={name} onChange={(e) => setName(e.target.value)} />
-        <select style={styles.select} value={loc} onChange={(e) => setLoc(e.target.value)}>
+      <div style={styles.kitchenAddGrid}>
+        <input
+          aria-label="Kitchen item"
+          style={{ ...styles.input, gridColumn: "1 / -1", width: "100%", minWidth: 0, boxSizing: "border-box" }}
+          placeholder="Item"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <select aria-label="Storage location" style={{ ...styles.select, width: "100%", minWidth: 0 }} value={loc} onChange={(e) => setLoc(e.target.value)}>
           <option>Fridge</option>
           <option>Freezer</option>
           <option>Pantry</option>
           <option>Supplements</option>
         </select>
-        <select aria-label="Item type" style={styles.select} value={staple ? "staple" : "non-staple"} onChange={(e) => setStaple(e.target.value === "staple")}>
+        <select aria-label="Item type" style={{ ...styles.select, width: "100%", minWidth: 0 }} value={staple ? "staple" : "non-staple"} onChange={(e) => setStaple(e.target.value === "staple")}>
           <option value="staple">Staple</option>
           <option value="non-staple">Non-staple</option>
         </select>
         <IconBtn onClick={add} />
-      </AddRow>
+      </div>
       <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
         {loc !== "Pantry" && loc !== "Supplements" && (
           <input
@@ -4288,6 +4311,12 @@ const buildStyles = () => ({
     justifyContent: "center",
     cursor: "pointer",
     flexShrink: 0,
+  },
+  kitchenAddGrid: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr) 38px",
+    gap: 8,
+    width: "100%",
   },
   row: {
     display: "flex",
