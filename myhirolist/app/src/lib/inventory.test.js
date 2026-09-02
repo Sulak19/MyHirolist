@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { dedupeInventoryItems, dedupeShoppingItems, itemKey, moveInventoryItem, withInventoryStaples } from "./inventory.js";
+import { clearLowStockForPrep, dedupeInventoryItems, dedupeShoppingItems, itemKey, moveInventoryItem, withInventoryStaples } from "./inventory.js";
 
 test("item matching ignores case, spacing, punctuation and simple plurals", () => {
   assert.equal(itemKey("  Spring-Onions "), itemKey("spring onion"));
@@ -93,4 +93,31 @@ test("putting away a recent-shop item stores its staple choice", () => {
 
   assert.equal(moved.location, "Fridge");
   assert.equal(moved.staple, true);
+});
+
+test("completing bread or frozen-rice prep clears its kitchen low marker", () => {
+  const items = [
+    { id: "bread", name: "Bread", location: "Freezer", lowStock: true },
+    { id: "rice", name: "Frozen rice", location: "Freezer", lowStock: true },
+    { id: "milk", name: "Milk", location: "Fridge", lowStock: true },
+  ];
+
+  const afterBread = clearLowStockForPrep(items, { kind: "stock", stockName: "bread" });
+  const afterRice = clearLowStockForPrep(afterBread, { kind: "stock", stockName: "frozen rice" });
+
+  assert.equal(afterRice.find((item) => item.id === "bread").lowStock, false);
+  assert.equal(afterRice.find((item) => item.id === "rice").lowStock, false);
+  assert.equal(afterRice.find((item) => item.id === "milk").lowStock, true);
+});
+
+test("non-stock prep never changes kitchen stock", () => {
+  const items = [{ id: "bread", name: "Bread", lowStock: true }];
+  const result = clearLowStockForPrep(items, { kind: "meal", stockName: "bread" });
+  assert.equal(result, items);
+});
+
+test("saved prep tasks from before stock names existed still clear low stock", () => {
+  const items = [{ id: "bread", name: "Bread", lowStock: true }];
+  const result = clearLowStockForPrep(items, { kind: "stock", label: "Bake bread" });
+  assert.equal(result[0].lowStock, false);
 });
