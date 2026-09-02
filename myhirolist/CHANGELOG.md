@@ -1,3 +1,9 @@
+## 1.0.33
+
+Merge PR #20: Fit Kitchen controls and clear prepared stock
+
+Fit Kitchen controls on phone screens and clear low stock when bread or frozen-rice prep is completed.
+
 ## 1.0.32
 
 Merge PR #19: Keep Prep current-week and non-cooking
