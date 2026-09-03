@@ -1,3 +1,7 @@
+## 1.0.34
+
+Search selected meals in Meal Plan (#22)
+
 ## 1.0.33
 
 Merge PR #20: Fit Kitchen controls and clear prepared stock
