@@ -541,6 +541,7 @@ export default function HomeBase() {
         {tab === "plan" && (
           <PlanTab
             meals={data.mealPrep}
+            selectedMealIds={data.mealSelection}
             plan={planWeek === "next" ? data.nextWeekPlan ?? EMPTY_WEEK : data.weekPlan}
             onPlanChange={(v, auto) =>
               setData((current) => ({
@@ -1031,14 +1032,28 @@ const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
 /* A tappable dropdown that replaces native <select>, which can be unresponsive
    on some mobile browsers/webviews. */
-function TapSelect({ value, options, onChange, placeholder, disabled }) {
+function TapSelect({ value, valueLabel, options, onChange, placeholder, disabled, searchable = false, searchPlaceholder = "Search", emptyMessage = "No matches" }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const selectedOption = options.find((o) => o.value === value);
+  const displayedLabel = selectedOption?.label || valueLabel;
+  const visibleOptions = searchable
+    ? options.filter((option) => option.label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
+    : options;
+
+  const close = () => {
+    setOpen(false);
+    setQuery("");
+  };
 
   return (
     <div style={{ position: "relative" }}>
       <button
-        onClick={() => !disabled && setOpen((o) => !o)}
+        onClick={() => {
+          if (disabled) return;
+          if (open) close();
+          else setOpen(true);
+        }}
         style={{
           ...styles.input,
           width: "100%",
@@ -1050,7 +1065,7 @@ function TapSelect({ value, options, onChange, placeholder, disabled }) {
           opacity: disabled ? 0.5 : 1,
         }}
       >
-        <span style={{ color: selectedOption ? C.ink : C.inkFaint }}>{selectedOption ? selectedOption.label : placeholder}</span>
+        <span style={{ color: displayedLabel ? C.ink : C.inkFaint }}>{displayedLabel || placeholder}</span>
         <ChevronDown size={15} color={C.inkFaint} style={{ transform: open ? "rotate(180deg)" : "none", flexShrink: 0 }} />
       </button>
       {open && !disabled && (
@@ -1069,35 +1084,48 @@ function TapSelect({ value, options, onChange, placeholder, disabled }) {
             boxShadow: "0 4px 10px rgba(0,0,0,0.1)",
           }}
         >
+          {searchable && (
+            <div style={{ padding: 8, borderBottom: `1px solid ${C.lineSoft}` }}>
+              <SearchInput value={query} onChange={setQuery} placeholder={searchPlaceholder} />
+            </div>
+          )}
           <button
             onClick={() => {
               onChange("");
-              setOpen(false);
+              close();
             }}
             style={styles.tapOption}
           >
-            {placeholder}
+            Clear meal
           </button>
-          {options.map((o) => (
+          {visibleOptions.map((o) => (
             <button
               key={o.value}
               onClick={() => {
                 onChange(o.value);
-                setOpen(false);
+                close();
               }}
               style={{ ...styles.tapOption, fontWeight: o.value === value ? 600 : 400 }}
             >
               {o.label}
             </button>
           ))}
+          {visibleOptions.length === 0 && (
+            <div style={{ padding: "10px 12px", fontSize: 12, color: C.inkFaint }}>{emptyMessage}</div>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function PlanTab({ meals, plan, onPlanChange, planAuto, planWeek: activeWeek, onPlanWeekChange, otherWeekPlan, thisWeekPlan, nextWeekPlan, mealHistory, shoppingList, onShoppingChange, prepList, onPrepChange, batchList, onBatchChange, inventory }) {
+function PlanTab({ meals, selectedMealIds, plan, onPlanChange, planAuto, planWeek: activeWeek, onPlanWeekChange, otherWeekPlan, thisWeekPlan, nextWeekPlan, mealHistory, shoppingList, onShoppingChange, prepList, onPrepChange, batchList, onBatchChange, inventory }) {
   const planContext = { meals, batches: batchList, inventory, mealHistory, otherWeekPlan };
+  const selectedMealIdSet = new Set(selectedMealIds || []);
+  const selectedMealOptions = meals
+    .filter((savedMeal) => selectedMealIdSet.has(savedMeal.id))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((savedMeal) => ({ value: savedMeal.id, label: savedMeal.name }));
 
   // Suggests rather than decides: the empty days get a proposal each, which
   // you accept one at a time. Nothing is written to the plan here.
@@ -1334,12 +1362,14 @@ function PlanTab({ meals, plan, onPlanChange, planAuto, planWeek: activeWeek, on
               <div style={{ marginTop: 10 }}>
                 <TapSelect
                   value={meal ? meal.id : ""}
-                  options={[...meals]
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .map((savedMeal) => ({ value: savedMeal.id, label: savedMeal.name }))}
+                  valueLabel={meal?.name}
+                  options={selectedMealOptions}
                   onChange={(v) => setDay(day, v)}
-                  placeholder={meals.length === 0 ? "Add a saved meal first" : "Choose any saved meal —"}
-                  disabled={meals.length === 0}
+                  placeholder={selectedMealOptions.length === 0 ? "Select meals in Meals first" : "Search selected meals —"}
+                  disabled={selectedMealOptions.length === 0}
+                  searchable
+                  searchPlaceholder="Search selected meals"
+                  emptyMessage="No selected meals match"
                 />
               </div>
             </div>
