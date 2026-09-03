@@ -758,6 +758,32 @@ export function reconcilePrep(existing, tasks) {
   return [...added, ...kept];
 }
 
+/**
+ * Produces the current Shopping and Prep projections for the saved meal plan.
+ * Plan-owned, unfinished rows that are no longer required are removed, while
+ * household-added rows and completed work retain their existing safeguards.
+ */
+export function reconcileMealPlanLists({ shopping, prep, thisWeekPlan, nextWeekPlan, meals, batches, inventory, dismissedShopping }) {
+  const needs = shoppingNeeds(
+    [
+      { plan: thisWeekPlan, week: "this" },
+      { plan: nextWeekPlan, week: "next" },
+    ],
+    meals,
+    batches,
+    inventory
+  );
+  const cleanedShopping = removePrepOnlyShoppingItems(shopping, inventory);
+  const shoppingResult = reconcileShopping(cleanedShopping, needs, dismissedShopping);
+  const tasks = prepTasks(thisWeekPlan, {}, meals, batches, inventory);
+
+  return {
+    shopping: shoppingResult.items,
+    prep: reconcilePrep(prep, tasks),
+    dismissedShopping: shoppingResult.dismissed,
+  };
+}
+
 const WEEKDAY_INDEX = { Monday: 0, Tuesday: 1, Wednesday: 2, Thursday: 3, Friday: 4 };
 
 /**
