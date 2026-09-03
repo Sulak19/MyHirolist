@@ -35,6 +35,7 @@ import {
   removePrepOnlyShoppingItems,
   prepTasks,
   reconcilePrep,
+  reconcileMealPlanLists,
   CATEGORY_ORDER,
   locationCategory,
 } from "./lib/planner.js";
@@ -559,6 +560,8 @@ export default function HomeBase() {
             mealHistory={data.mealHistory}
             shoppingList={data.shopping}
             onShoppingChange={(v) => update("shopping", v)}
+            dismissedShopping={data.dismissedShopping}
+            onDismissedShoppingChange={(v) => update("dismissedShopping", v)}
             prepList={data.weekendPrep}
             onPrepChange={(v) => update("weekendPrep", v)}
             batchList={data.batchCooking}
@@ -1119,7 +1122,7 @@ function TapSelect({ value, valueLabel, options, onChange, placeholder, disabled
   );
 }
 
-function PlanTab({ meals, selectedMealIds, plan, onPlanChange, planAuto, planWeek: activeWeek, onPlanWeekChange, otherWeekPlan, thisWeekPlan, nextWeekPlan, mealHistory, shoppingList, onShoppingChange, prepList, onPrepChange, batchList, onBatchChange, inventory }) {
+function PlanTab({ meals, selectedMealIds, plan, onPlanChange, planAuto, planWeek: activeWeek, onPlanWeekChange, otherWeekPlan, thisWeekPlan, nextWeekPlan, mealHistory, shoppingList, onShoppingChange, dismissedShopping, onDismissedShoppingChange, prepList, onPrepChange, batchList, onBatchChange, inventory }) {
   const planContext = { meals, batches: batchList, inventory, mealHistory, otherWeekPlan };
   const selectedMealIdSet = new Set(selectedMealIds || []);
   const selectedMealOptions = meals
@@ -1195,10 +1198,31 @@ function PlanTab({ meals, selectedMealIds, plan, onPlanChange, planAuto, planWee
   const plannedMeals = [...new Map(dayAssignments.filter((assignment) => assignment.meal).map((assignment) => [assignment.meal.id, assignment.meal])).values()];
 
   const addPlanToShopping = () => {
-    addMealsToShoppingList(plannedMeals, shoppingList, onShoppingChange, inventory);
+    const synced = reconcileMealPlanLists({
+      shopping: shoppingList,
+      prep: prepList,
+      thisWeekPlan,
+      nextWeekPlan,
+      meals,
+      batches: batchList,
+      inventory,
+      dismissedShopping,
+    });
+    onShoppingChange(synced.shopping.map((item) => (item.id ? item : { ...item, id: uid() })));
+    onDismissedShoppingChange(synced.dismissedShopping);
   };
   const addPlanToPrep = () => {
-    addMealsToPrepList(plannedMeals, prepList, onPrepChange);
+    const synced = reconcileMealPlanLists({
+      shopping: shoppingList,
+      prep: prepList,
+      thisWeekPlan,
+      nextWeekPlan,
+      meals,
+      batches: batchList,
+      inventory,
+      dismissedShopping,
+    });
+    onPrepChange(synced.prep.map((item) => (item.id ? item : { ...item, id: uid() })));
   };
 
   // Generate suggestions for empty days: batch portions first, then meals matching proteins in stock, then any meal.
