@@ -3491,7 +3491,14 @@ function InventoryGroup({ title, icon: Icon, items, onRemove, onToggleLowStock, 
           const days = i.expiry ? Math.ceil((new Date(i.expiry) - new Date()) / 86400000) : null;
           const urgent = (days !== null && days <= 3) || i.lowStock;
           return (
-            <div key={i.id} style={{ ...styles.row, borderColor: urgent ? C.rust : C.line }}>
+            <div
+              key={i.id}
+              style={{
+                ...styles.row,
+                background: i.staple === true ? C.stapleTint : i.staple === false ? C.nonStapleTint : C.card,
+                borderColor: urgent ? C.rust : C.line,
+              }}
+            >
               <div style={{ flex: 1 }}>
                 <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 15 }}>{i.name}</div>
                 {!isPantry && i.expiry && (
