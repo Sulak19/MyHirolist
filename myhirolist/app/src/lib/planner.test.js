@@ -19,6 +19,7 @@ import {
   prepTasks,
   splitPrepNote,
   reconcilePrep,
+  reconcileMealPlanLists,
 } from "./planner.js";
 
 const NOW = new Date(2026, 7, 26, 12).getTime();
@@ -618,6 +619,37 @@ test("prep reconciles: adds new, keeps hand-added, drops what left the plan", ()
   const emptied = reconcilePrep(withManual, []);
   assert.ok(emptied.some((t) => t.label === "Sharpen knives"));
   assert.ok(!emptied.some((t) => t.source === "plan" && !t.checked), "plan task gone with the meal");
+});
+
+test("updating a meal plan replaces its unfinished shopping and prep rows", () => {
+  const initial = reconcileMealPlanLists({
+    shopping: [{ id: "manual-shop", name: "Batteries", checked: false }],
+    prep: [{ id: "manual-prep", label: "Sharpen knives", checked: false }],
+    thisWeekPlan: { Monday: "hamburg" },
+    nextWeekPlan: {},
+    meals: MEALS,
+    batches: BATCHES,
+    inventory: [],
+    dismissedShopping: [],
+  });
+
+  const updated = reconcileMealPlanLists({
+    shopping: initial.shopping,
+    prep: initial.prep,
+    thisWeekPlan: { Monday: "adobo" },
+    nextWeekPlan: {},
+    meals: MEALS,
+    batches: BATCHES,
+    inventory: [],
+    dismissedShopping: initial.dismissedShopping,
+  });
+
+  assert.ok(updated.shopping.some((item) => item.name === "Batteries" && !item.source), "manual shopping survives");
+  assert.ok(!updated.shopping.some((item) => item.name === "beef mince"), "old meal shopping is removed");
+  assert.ok(updated.shopping.some((item) => item.name === "chicken" && item.source === "plan"), "new meal shopping is added");
+  assert.ok(updated.prep.some((item) => item.label === "Sharpen knives" && !item.source), "manual prep survives");
+  assert.ok(!updated.prep.some((item) => item.source === "plan" && item.meal === "Hamburg"), "old meal prep is removed");
+  assert.ok(updated.prep.some((item) => item.source === "plan" && item.meal === "Adobo"), "new meal prep is added");
 });
 
 test("a prep task already ticked is not removed when the plan moves on", () => {
