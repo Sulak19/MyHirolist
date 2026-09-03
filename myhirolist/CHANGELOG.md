@@ -1,3 +1,13 @@
+## 1.0.35
+
+Reconcile Shopping and Prep with meal plan changes (#23)
+
+* Reconcile lists with updated meal plans
+
+* Reconcile lists with updated meal plans
+
+* Reconcile lists with updated meal plans
+
 ## 1.0.34
 
 Search selected meals in Meal Plan (#22)
