@@ -652,10 +652,10 @@ test("updating a meal plan replaces its unfinished shopping and prep rows", () =
   assert.ok(updated.prep.some((item) => item.source === "plan" && item.meal === "Adobo"), "new meal prep is added");
 });
 
-test("a prep task already ticked is not removed when the plan moves on", () => {
+test("completed meal prep is removed when its meal leaves the plan", () => {
   const done = [{ key: "this::Adobo::Marinate.", label: "Marinate.", checked: true, source: "plan" }];
   const out = reconcilePrep(done, []);
-  assert.equal(out.length, 1);
+  assert.deepEqual(out, []);
 });
 
 test("a completed low-stock prep task clears once stock is replenished", () => {
