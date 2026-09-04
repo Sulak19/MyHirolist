@@ -733,10 +733,9 @@ export function reconcilePrep(existing, tasks) {
       const task = wanted.get(item.key);
       kept.push({ ...item, label: task.label, stockName: task.stockName, dayOf: task.dayOf, meal: task.meal, week: task.week, kind: task.kind });
       seenKeys.add(item.key);
-    } else if (item.checked && item.kind !== "stock") {
-      kept.push(item); // already done - dropping it would feel like a bug
-      seenKeys.add(item.key);
     }
+    // Otherwise the task's meal has left the plan. Remove it even if it was
+    // completed: Prep reflects the current plan, not a permanent history.
   }
 
   const added = [];
@@ -760,8 +759,8 @@ export function reconcilePrep(existing, tasks) {
 
 /**
  * Produces the current Shopping and Prep projections for the saved meal plan.
- * Plan-owned, unfinished rows that are no longer required are removed, while
- * household-added rows and completed work retain their existing safeguards.
+ * Plan-owned rows that are no longer required are removed, while household-
+ * added rows and Shopping's already-purchased safeguards remain intact.
  */
 export function reconcileMealPlanLists({ shopping, prep, thisWeekPlan, nextWeekPlan, meals, batches, inventory, dismissedShopping }) {
   const needs = shoppingNeeds(
