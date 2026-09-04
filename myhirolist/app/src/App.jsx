@@ -4549,3 +4549,11 @@ const buildStyles = () => ({
     height: 10,
     background:
       `linear-gradient(-45deg, ${C.paper} 4px, transparent 0), linear-gradient(45deg, ${C.paper} 4px, transparent 0)`,
+    backgroundSize: "10px 10px",
+    backgroundColor: C.card,
+  },
+});
+
+// Every read of styles.x rebuilds against the current palette, so the
+// whole app re-skins when the theme flips without touching call sites.
+const styles = new Proxy({}, { get: (_, key) => buildStyles()[key] });
