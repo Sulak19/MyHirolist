@@ -1,3 +1,13 @@
+## 1.0.38
+
+Remove stale meal prep when the plan changes (#25)
+
+* Remove prep for meals no longer planned
+
+* Remove prep for meals no longer planned
+
+* Remove prep for meals no longer planned
+
 ## 1.0.35
 
 Reconcile Shopping and Prep with meal plan changes (#23)
