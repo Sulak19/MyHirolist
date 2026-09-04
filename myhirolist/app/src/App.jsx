@@ -1035,13 +1035,14 @@ const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
 /* A tappable dropdown that replaces native <select>, which can be unresponsive
    on some mobile browsers/webviews. */
-function TapSelect({ value, valueLabel, options, onChange, placeholder, disabled, searchable = false, searchPlaceholder = "Search", emptyMessage = "No matches" }) {
+function TapSelect({ value, valueLabel, options, searchOptions = options, onChange, placeholder, disabled, searchable = false, searchPlaceholder = "Search", emptyMessage = "No matches", defaultEmptyMessage = emptyMessage }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const selectedOption = options.find((o) => o.value === value);
   const displayedLabel = selectedOption?.label || valueLabel;
-  const visibleOptions = searchable
-    ? options.filter((option) => option.label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const visibleOptions = searchable && normalizedQuery
+    ? searchOptions.filter((option) => option.label.toLocaleLowerCase().includes(normalizedQuery))
     : options;
 
   const close = () => {
@@ -1114,7 +1115,9 @@ function TapSelect({ value, valueLabel, options, onChange, placeholder, disabled
             </button>
           ))}
           {visibleOptions.length === 0 && (
-            <div style={{ padding: "10px 12px", fontSize: 12, color: C.inkFaint }}>{emptyMessage}</div>
+            <div style={{ padding: "10px 12px", fontSize: 12, color: C.inkFaint }}>
+              {normalizedQuery ? emptyMessage : defaultEmptyMessage}
+            </div>
           )}
         </div>
       )}
@@ -1127,6 +1130,9 @@ function PlanTab({ meals, selectedMealIds, plan, onPlanChange, planAuto, planWee
   const selectedMealIdSet = new Set(selectedMealIds || []);
   const selectedMealOptions = meals
     .filter((savedMeal) => selectedMealIdSet.has(savedMeal.id))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((savedMeal) => ({ value: savedMeal.id, label: savedMeal.name }));
+  const allMealOptions = [...meals]
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((savedMeal) => ({ value: savedMeal.id, label: savedMeal.name }));
 
@@ -1388,12 +1394,14 @@ function PlanTab({ meals, selectedMealIds, plan, onPlanChange, planAuto, planWee
                   value={meal ? meal.id : ""}
                   valueLabel={meal?.name}
                   options={selectedMealOptions}
+                  searchOptions={allMealOptions}
                   onChange={(v) => setDay(day, v)}
-                  placeholder={selectedMealOptions.length === 0 ? "Select meals in Meals first" : "Search selected meals —"}
-                  disabled={selectedMealOptions.length === 0}
+                  placeholder={selectedMealOptions.length === 0 ? "Search all saved meals —" : "Choose a ticked meal —"}
+                  disabled={meals.length === 0}
                   searchable
-                  searchPlaceholder="Search selected meals"
-                  emptyMessage="No selected meals match"
+                  searchPlaceholder="Search all saved meals"
+                  emptyMessage="No saved meals match"
+                  defaultEmptyMessage="No meals ticked — search above"
                 />
               </div>
             </div>
@@ -4533,11 +4541,3 @@ const buildStyles = () => ({
     height: 10,
     background:
       `linear-gradient(-45deg, ${C.paper} 4px, transparent 0), linear-gradient(45deg, ${C.paper} 4px, transparent 0)`,
-    backgroundSize: "10px 10px",
-    backgroundColor: C.card,
-  },
-});
-
-// Every read of styles.x rebuilds against the current palette, so the
-// whole app re-skins when the theme flips without touching call sites.
-const styles = new Proxy({}, { get: (_, key) => buildStyles()[key] });
