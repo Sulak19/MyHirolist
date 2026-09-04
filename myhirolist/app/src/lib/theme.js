@@ -25,6 +25,8 @@ export const LIGHT = {
   rust: "#B5502F", // warnings, overdue, errors
   rustWash: "#FBEAE6", // warning background
   autoTint: "#F2F4EC", // rows the app added itself, e.g. planned shopping
+  stapleTint: "#EDF3E5", // household staples in Kitchen
+  nonStapleTint: "#F7EFE5", // occasional/non-staple Kitchen items
 };
 
 export const DARK = {
@@ -45,6 +47,8 @@ export const DARK = {
   rust: "#D9775A",
   rustWash: "#3A2A25",
   autoTint: "#242B26",
+  stapleTint: "#283126",
+  nonStapleTint: "#302B26",
 };
 
 // Live-bound to the current palette. Styles read C.paper etc. and, because

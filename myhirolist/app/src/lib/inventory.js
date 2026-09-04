@@ -151,3 +151,16 @@ export function clearLowStockForPrep(items, task) {
   });
   return changed ? next : items;
 }
+
+/** Presents household staples first without changing the saved inventory
+ * order. Items keep their relative order within each group. */
+export function staplesFirst(items) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort((left, right) => {
+      const byStaple = Number(right.item?.staple === true) - Number(left.item?.staple === true);
+      return byStaple || left.index - right.index;
+    })
+    .map(({ item }) => item);
+}

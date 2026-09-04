@@ -49,7 +49,7 @@ import {
 } from "./lib/dogTreatments.js";
 import { getToday } from "./lib/api.js";
 import { C, useTheme } from "./lib/theme.js";
-import { clearLowStockForPrep, dedupeInventoryItems, dedupeShoppingItems, itemKey, moveInventoryItem, withInventoryStaples } from "./lib/inventory.js";
+import { clearLowStockForPrep, dedupeInventoryItems, dedupeShoppingItems, itemKey, moveInventoryItem, staplesFirst, withInventoryStaples } from "./lib/inventory.js";
 import { shouldShowMealPrepToday } from "./lib/today.js";
 import { cleaningTaskStatus, sortCleaningTasks } from "./lib/cleaning.js";
 
@@ -3542,17 +3542,25 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
 
 function InventoryGroup({ title, icon: Icon, items, onRemove, onToggleLowStock, onMove, onSetStaple }) {
   const isPantry = title === "Pantry" || title === "Supplements";
+  const sortedItems = staplesFirst(items);
   return (
     <div style={{ marginTop: 18 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 0.5 }}>
         <Icon size={13} /> {title} ({items.length})
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
-        {items.map((i) => {
+        {sortedItems.map((i) => {
           const days = i.expiry ? Math.ceil((new Date(i.expiry) - new Date()) / 86400000) : null;
           const urgent = (days !== null && days <= 3) || i.lowStock;
           return (
-            <div key={i.id} style={{ ...styles.row, borderColor: urgent ? C.rust : C.line }}>
+            <div
+              key={i.id}
+              style={{
+                ...styles.row,
+                background: i.staple === true ? C.stapleTint : i.staple === false ? C.nonStapleTint : C.card,
+                borderColor: urgent ? C.rust : C.line,
+              }}
+            >
               <div style={{ flex: 1 }}>
                 <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 15 }}>{i.name}</div>
                 {!isPantry && i.expiry && (

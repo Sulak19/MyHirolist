@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { clearLowStockForPrep, dedupeInventoryItems, dedupeShoppingItems, itemKey, moveInventoryItem, withInventoryStaples } from "./inventory.js";
+import { clearLowStockForPrep, dedupeInventoryItems, dedupeShoppingItems, itemKey, moveInventoryItem, staplesFirst, withInventoryStaples } from "./inventory.js";
 
 test("item matching ignores case, spacing, punctuation and simple plurals", () => {
   assert.equal(itemKey("  Spring-Onions "), itemKey("spring onion"));
@@ -120,4 +120,17 @@ test("saved prep tasks from before stock names existed still clear low stock", (
   const items = [{ id: "bread", name: "Bread", lowStock: true }];
   const result = clearLowStockForPrep(items, { kind: "stock", label: "Bake bread" });
   assert.equal(result[0].lowStock, false);
+});
+
+test("staples display first while each group's saved order is preserved", () => {
+  const items = [
+    { id: "milk", name: "Milk", staple: false },
+    { id: "rice", name: "Rice", staple: true },
+    { id: "cheese", name: "Cheese", staple: false },
+    { id: "oil", name: "Oil", staple: true },
+    { id: "pending", name: "Pending", staple: null },
+  ];
+
+  assert.deepEqual(staplesFirst(items).map((item) => item.id), ["rice", "oil", "milk", "cheese", "pending"]);
+  assert.deepEqual(items.map((item) => item.id), ["milk", "rice", "cheese", "oil", "pending"], "display sorting must not rewrite saved stock");
 });
