@@ -5,6 +5,8 @@ import { computeSummary, isDue, sensorsFrom } from "../summary.js";
 
 const NOW = Date.parse("2026-08-23T12:00:00Z");
 const DAY = 86400000;
+const localMs = (year, month, day, hour = 12) => new Date(year, month - 1, day, hour).getTime();
+const localIso = (year, month, day, hour = 12) => new Date(localMs(year, month, day, hour)).toISOString();
 
 test("a never-done task is due", () => {
   assert.equal(isDue({ freq: "Weekly", lastDone: null }, NOW), true);
@@ -14,12 +16,12 @@ test("an as-needed task is never due", () => {
   assert.equal(isDue({ freq: "As needed", lastDone: null }, NOW), false);
 });
 
-test("a weekly task is due after seven days, not before", () => {
-  const sixDaysAgo = new Date(NOW - 6 * DAY).toISOString();
-  const eightDaysAgo = new Date(NOW - 8 * DAY).toISOString();
+test("a weekly task becomes due on Friday rather than seven days after completion", () => {
+  const task = { freq: "Weekly", lastDone: localIso(2026, 8, 23) };
 
-  assert.equal(isDue({ freq: "Weekly", lastDone: sixDaysAgo }, NOW), false);
-  assert.equal(isDue({ freq: "Weekly", lastDone: eightDaysAgo }, NOW), true);
+  assert.equal(isDue(task, localMs(2026, 8, 27)), false);
+  assert.equal(isDue(task, localMs(2026, 8, 28, 0)), true);
+  assert.equal(isDue({ ...task, lastDone: localIso(2026, 8, 28) }, localMs(2026, 8, 29)), false);
 });
 
 test("an unknown frequency falls back to weekly rather than throwing", () => {

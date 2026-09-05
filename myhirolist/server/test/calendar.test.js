@@ -38,9 +38,14 @@ test("a task never done is due today", () => {
   assert.equal(nextDue({ freq: "Weekly", lastDone: null }, NOW), "2026-08-26");
 });
 
-test("a weekly task done today falls due a week later", () => {
+test("a weekly task falls due on the next Friday", () => {
   const task = { freq: "Weekly", lastDone: localIso(2026, 8, 26) };
-  assert.equal(nextDue(task, NOW), "2026-09-02");
+  assert.equal(nextDue(task, NOW), "2026-08-28");
+});
+
+test("a weekly task completed on Friday falls due the following Friday", () => {
+  const task = { freq: "Weekly", lastDone: localIso(2026, 8, 28) };
+  assert.equal(nextDue(task, NOW), "2026-09-04");
 });
 
 test("an overdue task shows on today rather than in the past", () => {

@@ -8,9 +8,27 @@
 const FREQ_DAYS = { Daily: 1, "Twice weekly": 3, Weekly: 7, Fortnightly: 14, Monthly: 30 };
 const DAY_MS = 86400000;
 
+function localDayNumber(value) {
+  const date = new Date(value);
+  return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / DAY_MS;
+}
+
+function nextWeeklyFriday(lastDone) {
+  const date = new Date(lastDone);
+  if (Number.isNaN(date.getTime())) return null;
+  const result = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const daysUntilFriday = (5 - result.getDay() + 7) % 7 || 7;
+  result.setDate(result.getDate() + daysUntilFriday);
+  return result;
+}
+
 export function isDue(task, nowMs) {
   if (task.freq === "As needed") return false;
   if (!task.lastDone) return true;
+  if (task.freq === "Weekly") {
+    const friday = nextWeeklyFriday(task.lastDone);
+    return friday ? localDayNumber(nowMs) >= localDayNumber(friday) : false;
+  }
   const days = FREQ_DAYS[task.freq] ?? 7;
   return (nowMs - new Date(task.lastDone).getTime()) / DAY_MS >= days;
 }
