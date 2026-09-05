@@ -6,7 +6,28 @@ const FREQUENCY_DAYS = {
   Monthly: 30,
 };
 
+const DAY_MS = 86400000;
+
+function localDayNumber(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / DAY_MS;
+}
+
+// Weekly cleaning belongs to a fixed household reset day. Always choose the
+// first Friday strictly after completion, including when completed on Friday.
+export function nextWeeklyFriday(lastDone) {
+  const date = new Date(lastDone);
+  if (Number.isNaN(date.getTime())) return null;
+  const result = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const daysUntilFriday = (5 - result.getDay() + 7) % 7 || 7;
+  result.setDate(result.getDate() + daysUntilFriday);
+  return result;
+}
+
 function dueAt(task) {
+  if (task?.freq === "Weekly" && task?.lastDone) {
+    return nextWeeklyFriday(task.lastDone)?.getTime() ?? Number.NEGATIVE_INFINITY;
+  }
   const days = FREQUENCY_DAYS[task?.freq];
   if (!days) return null;
   if (!task?.lastDone) return Number.NEGATIVE_INFINITY;
@@ -30,8 +51,9 @@ export function cleaningTaskStatus(task, now = new Date()) {
     return { due: false, overdue: false, completed: false, neverDone: false, overdueBy: null };
   }
 
-  const elapsed = Math.floor((nowMs - lastDone) / 86400000);
-  const overdueBy = elapsed - days;
+  const overdueBy = task.freq === "Weekly"
+    ? localDayNumber(nowMs) - localDayNumber(nextWeeklyFriday(lastDone))
+    : Math.floor((nowMs - lastDone) / DAY_MS) - days;
   const due = overdueBy >= 0;
   return {
     due,
