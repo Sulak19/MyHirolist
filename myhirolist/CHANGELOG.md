@@ -1,3 +1,19 @@
+## 1.0.39
+
+Make weekly cleaning due every Friday (#26)
+
+* Schedule weekly cleaning every Friday
+
+* Schedule weekly cleaning every Friday
+
+* Schedule weekly cleaning every Friday
+
+* Schedule weekly cleaning every Friday
+
+* Schedule weekly cleaning every Friday
+
+* Schedule weekly cleaning every Friday
+
 ## 1.0.38
 
 Remove stale meal prep when the plan changes (#25)
