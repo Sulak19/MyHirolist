@@ -109,13 +109,24 @@ export function nextDue(task, nowMs) {
   if (!task || task.freq === "As needed") return null;
   if (!task.lastDone) return toDateKey(nowMs); // never done, so it is due now
 
-  const interval = FREQ_DAYS[task.freq] ?? 7;
-  const due = Date.parse(task.lastDone) + interval * DAY_MS;
-  if (Number.isNaN(due)) return null;
+  let dueDate;
+  if (task.freq === "Weekly") {
+    const completed = new Date(task.lastDone);
+    if (Number.isNaN(completed.getTime())) return null;
+    const daysUntilFriday = (5 - completed.getDay() + 7) % 7 || 7;
+    completed.setDate(completed.getDate() + daysUntilFriday);
+    dueDate = toDateKey(completed.getTime());
+  } else {
+    const interval = FREQ_DAYS[task.freq] ?? 7;
+    const due = Date.parse(task.lastDone) + interval * DAY_MS;
+    if (Number.isNaN(due)) return null;
+    dueDate = toDateKey(due);
+  }
 
   // Anything already overdue belongs on today rather than in the past, where
   // nobody would see it.
-  return due < nowMs ? toDateKey(nowMs) : toDateKey(due);
+  const today = toDateKey(nowMs);
+  return dueDate < today ? today : dueDate;
 }
 
 /**
