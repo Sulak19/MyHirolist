@@ -41,6 +41,8 @@ const BATCHES = [{ id: "b1", name: "Bolognese", portions: 2 }];
 
 test("ingredients land in sensible supermarket aisles", () => {
   assert.equal(categoryOf("chicken thigh"), "Meat & fish");
+  assert.equal(categoryOf("goat shoulder"), "Meat & fish");
+  assert.equal(categoryOf("veal schnitzel"), "Meat & fish");
   assert.equal(categoryOf("onions"), "Produce");
   assert.equal(categoryOf("milk"), "Dairy");
   assert.equal(categoryOf("soy sauce"), "Pantry");
@@ -209,6 +211,48 @@ test("shopping lists what the plan needs and skips what is stocked", () => {
   assert.deepEqual(needs[0].forMeals, ["Hamburg"]);
 });
 
+test("pork belly in the Kitchen satisfies a pork belly meal ingredient", () => {
+  const meals = [{ id: "lu-rou-fan", name: "Lu rou fan", ingredients: ["pork belly"] }];
+  const needs = shoppingNeeds(
+    [{ plan: { Monday: "lu-rou-fan" }, week: "this" }],
+    meals,
+    [],
+    [{ name: "Pork belly slices 500g", location: "Freezer", lowStock: false }]
+  );
+
+  assert.deepEqual(needs, []);
+});
+
+test("a specific pork cut can satisfy generic pork but not pork mince", () => {
+  const meals = [
+    { id: "generic-pork", name: "Pork dinner", ingredients: ["pork"] },
+    { id: "minced-pork", name: "Pork dumplings", ingredients: ["pork mince"] },
+  ];
+  const needs = shoppingNeeds(
+    [{ plan: { Monday: "generic-pork", Tuesday: "minced-pork" }, week: "this" }],
+    meals,
+    [],
+    [{ name: "Pork belly", location: "Freezer", lowStock: false }]
+  );
+
+  assert.deepEqual(needs.map((need) => need.name), ["pork mince"]);
+});
+
+test("low pork belly and a generic pork meal create one shopping row", () => {
+  const meals = [{ id: "pork-dinner", name: "Pork dinner", ingredients: ["pork"] }];
+  const needs = shoppingNeeds(
+    [{ plan: { Monday: "pork-dinner" }, week: "this" }],
+    meals,
+    [],
+    [{ name: "Pork belly", location: "Freezer", lowStock: true }]
+  );
+
+  assert.equal(needs.length, 1);
+  assert.equal(needs[0].name, "Pork belly");
+  assert.deepEqual(needs[0].reasons.sort(), ["low", "meal"]);
+  assert.deepEqual(needs[0].forMeals, ["Pork dinner"]);
+});
+
 test("an ingredient wanted by two meals is listed once, citing both", () => {
   const needs = shoppingNeeds([{ plan: { Monday: "hamburg", Tuesday: "bibimbap" }, week: "this" }], MEALS, BATCHES, []);
   const mince = needs.find((n) => n.name === "beef mince");
@@ -285,6 +329,17 @@ test("selected meals add consistently categorised shopping items with meal names
   assert.equal(spinach.category, "Produce");
   assert.deepEqual(spinach.forMeals, ["Bibimbap"]);
   assert.ok(result.items.every((item) => item.source === "selected-meals" && item.reasons.includes("meal")));
+});
+
+test("selected meals also recognise compatible meat cuts already in the Kitchen", () => {
+  const result = addSelectedMealsToShopping(
+    [],
+    [{ id: "pork-dinner", name: "Pork dinner", ingredients: ["pork", "pork mince"] }],
+    [{ name: "Pork belly slices", location: "Freezer", lowStock: false }],
+    () => "selected"
+  );
+
+  assert.deepEqual(result.items.map((item) => item.name), ["pork mince"]);
 });
 
 test("selecting a meal enriches an existing plain shopping entry", () => {
