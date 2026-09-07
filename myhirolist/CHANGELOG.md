@@ -1,3 +1,9 @@
+## 1.0.41
+
+Merge pull request #28 from Sulak19/codex/meat-cut-matching
+
+Match meat cuts across meals, Kitchen and Shopping
+
 ## 1.0.39
 
 Make weekly cleaning due every Friday (#26)
