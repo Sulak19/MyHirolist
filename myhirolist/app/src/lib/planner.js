@@ -10,7 +10,7 @@
 // available to assume for a later meal. That needs no extra data entry and is
 // close enough for a household.
 
-import { dedupeShoppingItems, itemKey } from "./inventory.js";
+import { availableIngredientMatches, dedupeShoppingItems, ingredientMatchesStock, ingredientRequirementKeys, itemKey, stockKeysForIngredient } from "./inventory.js";
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
@@ -19,7 +19,7 @@ const asArray = (value) => (Array.isArray(value) ? value : []);
 
 // --- ingredient categories --------------------------------------------
 
-const MEAT = ["chicken", "beef", "pork", "lamb", "steak", "mince", "fish", "shrimp", "prawn", "sausage", "kabana", "bacon", "chorizo", "tofu", "spec"];
+const MEAT = ["chicken", "beef", "pork", "lamb", "turkey", "duck", "goat", "veal", "venison", "rabbit", "steak", "mince", "fillet", "tenderloin", "brisket", "cutlet", "schnitzel", "fish", "shrimp", "prawn", "sausage", "kabana", "bacon", "chorizo", "tofu", "spec"];
 const PRODUCE = ["onion", "carrot", "cabbage", "spinach", "potato", "garlic", "ginger", "chive", "capsicum", "tomato", "cucumber", "zucchini", "daikon", "sprout", "leek", "wombok", "enoki", "basil", "coriander", "chilli", "lemon", "lime", "mushroom", "bean", "corn", "veg", "salad", "herb"];
 const DAIRY = ["milk", "cheese", "butter", "cream", "yoghurt", "yogurt", "egg"];
 const FROZEN = ["frozen", "ice"];
@@ -108,6 +108,7 @@ export function committedIngredients(plans, meals, batches) {
         // inspect the set, plus the shared identity key used for matching.
         committed.add(norm(ingredient));
         committed.add(itemKey(ingredient));
+        for (const key of ingredientRequirementKeys(ingredient)) committed.add(key);
       }
     }
   }
@@ -119,9 +120,9 @@ export function committedIngredients(plans, meals, batches) {
 export function availableStock(inventory, committed = new Set()) {
   const available = new Set();
   for (const item of asArray(inventory)) {
-    const key = itemKey(item?.name);
-    if (!key || item.lowStock || committed.has(key)) continue;
-    available.add(key);
+    const keys = stockKeysForIngredient(item?.name);
+    if (!keys.length || item.lowStock || keys.some((key) => committed.has(key))) continue;
+    for (const key of keys) available.add(key);
   }
   return available;
 }
@@ -170,7 +171,7 @@ export function scoreMeal(meal, context) {
   const proteins = asArray(meal.ingredients).filter(isProtein);
   const tags = asArray(meal.tags);
 
-  if (proteins.some((p) => available.has(norm(p)))) score += 25;
+  if (proteins.some((p) => availableIngredientMatches(available, p))) score += 25;
 
   for (const tag of tags) {
     const used = proteinCounts.get(tag) ?? 0;
@@ -285,6 +286,11 @@ export function shoppingNeeds(weeks, meals, batches, inventory) {
 
     let need = needs.get(key);
     if (!need) {
+      need = [...needs.values()].find((candidate) =>
+        ingredientMatchesStock(rawName, candidate.name) || ingredientMatchesStock(candidate.name, rawName)
+      );
+    }
+    if (!need) {
       need = {
         name: String(rawName).trim(),
         category: category ?? categoryOf(rawName),
@@ -321,7 +327,7 @@ export function shoppingNeeds(weeks, meals, batches, inventory) {
 
     for (const { meal } of resolvePlanned(plan, meals, batches)) {
       for (const ingredient of asArray(meal?.ingredients)) {
-        if (stocked.has(itemKey(ingredient))) continue;
+        if (availableIngredientMatches(stocked, ingredient)) continue;
         if (prepOnly.has(norm(ingredient))) continue;
         add(ingredient, { meal: meal.name, week, reason: "meal" });
       }
@@ -371,9 +377,11 @@ export function addSelectedMealsToShopping(shopping, meals, inventory, createId 
 
     for (const ingredient of asArray(meal?.ingredients)) {
       const key = itemKey(ingredient);
-      if (!key || stocked.has(key) || prepOnly.has(key)) continue;
+      if (!key || availableIngredientMatches(stocked, ingredient) || prepOnly.has(key)) continue;
 
-      const current = byName.get(key);
+      const current = byName.get(key) ?? [...byName.values()].find((candidate) =>
+        ingredientMatchesStock(ingredient, candidate.name) || ingredientMatchesStock(candidate.name, ingredient)
+      );
       if (current) {
         const category = !current.category || current.category === "Other" ? categoryOf(ingredient) : current.category;
         const forMeals = [...new Set([...asArray(current.forMeals), mealName])];
