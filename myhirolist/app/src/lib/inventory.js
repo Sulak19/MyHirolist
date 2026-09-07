@@ -30,6 +30,124 @@ export function itemKey(value) {
     .join(" ");
 }
 
+const MEAT_SPECIES = ["chicken", "beef", "pork", "lamb", "turkey", "duck", "goat", "veal", "venison", "rabbit"];
+const MEAT_SPECIES_PATTERN = MEAT_SPECIES.join("|");
+const MEAT_CUTS = [
+  ["mince", ["mince", "minced", "ground"]],
+  ["belly", ["belly"]],
+  ["thigh", ["thigh"]],
+  ["cutlet", ["cutlet", "schnitzel"]],
+  ["breast", ["breast"]],
+  ["wing", ["wing"]],
+  ["drumstick", ["drumstick"]],
+  ["leg", ["leg"]],
+  ["shoulder", ["shoulder"]],
+  ["loin", ["loin"]],
+  ["rump", ["rump"]],
+  ["rib", ["rib"]],
+  ["rack", ["rack"]],
+  ["brisket", ["brisket"]],
+  ["shank", ["shank"]],
+  ["neck", ["neck"]],
+  ["steak", ["steak"]],
+  ["chop", ["chop"]],
+  ["fillet", ["fillet", "tenderloin"]],
+  ["chunks", ["chunk", "diced", "cube", "cubed"]],
+  ["strips", ["strip"]],
+  ["roast", ["roast"]],
+  ["sausage", ["sausage", "chorizo", "kabana", "bacon"]],
+];
+
+const hasWord = (text, word) => new RegExp(`(?:^|\\s)${word}(?:$|\\s)`).test(text);
+
+function expandMeatAlternatives(value) {
+  const text = norm(value)
+    .normalize("NFKC")
+    .replace(/\bw\s*\/\s*/g, "with ")
+    .replace(/[()]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) return [];
+
+  const clauses = text.split(/\s+or\s+/);
+  const expanded = [];
+  let inheritedSpecies = null;
+  for (const rawClause of clauses) {
+    const clauseSpecies = MEAT_SPECIES.find((name) => hasWord(itemKey(rawClause.replace(/\//g, " ")), name));
+    const clause = clauseSpecies || !inheritedSpecies ? rawClause : `${inheritedSpecies} ${rawClause}`;
+    if (clauseSpecies) inheritedSpecies = clauseSpecies;
+    const speciesSlash = clause.match(new RegExp(`\\b(${MEAT_SPECIES_PATTERN})\\s*\\/\\s*(${MEAT_SPECIES_PATTERN})\\b`));
+    if (speciesSlash) {
+      expanded.push(clause.replace(speciesSlash[0], speciesSlash[1]), clause.replace(speciesSlash[0], speciesSlash[2]));
+      continue;
+    }
+
+    const cutSlash = clause.match(new RegExp(`^(.*\\b(?:${MEAT_SPECIES_PATTERN})\\b\\s+)([^/\\s]+)\\s*\\/\\s*([^\\s]+)(.*)$`));
+    if (cutSlash) {
+      expanded.push(`${cutSlash[1]}${cutSlash[2]}${cutSlash[4]}`, `${cutSlash[1]}${cutSlash[3]}${cutSlash[4]}`);
+      continue;
+    }
+    expanded.push(clause.replace(/\//g, " "));
+  }
+  return expanded;
+}
+
+function meatProfiles(value) {
+  const profiles = [];
+  for (const alternative of expandMeatAlternatives(value)) {
+    const words = itemKey(alternative);
+    const species = MEAT_SPECIES.find((name) => hasWord(words, name)) ?? null;
+    const cut = MEAT_CUTS.find(([, aliases]) => aliases.some((alias) => hasWord(words, itemKey(alias))))?.[0] ?? null;
+    if (species || cut) profiles.push({ species, cut });
+  }
+  return profiles;
+}
+
+/** True when one Kitchen meat item can satisfy a meal ingredient. Generic
+ * animal names accept any cut, while named cuts remain specific. */
+export function ingredientMatchesStock(required, stocked) {
+  const requiredKey = itemKey(required);
+  const stockedKey = itemKey(stocked);
+  if (requiredKey && requiredKey === stockedKey) return true;
+  const requirements = meatProfiles(required);
+  const stock = meatProfiles(stocked);
+  if (!requirements.length || !stock.length) return false;
+
+  return requirements.some((need) => stock.some((have) => {
+    const speciesMatches = need.species ? need.species === have.species : Boolean(need.cut);
+    const cutMatches = need.cut ? need.cut === have.cut : true;
+    return speciesMatches && cutMatches;
+  }));
+}
+
+export function ingredientRequirementKeys(value) {
+  const keys = new Set([itemKey(value)]);
+  for (const profile of meatProfiles(value)) {
+    if (profile.species && profile.cut) keys.add(`meat:${profile.species}:${profile.cut}`);
+    else if (profile.species) keys.add(`meat:${profile.species}:any`);
+    else if (profile.cut) keys.add(`meat:any:${profile.cut}`);
+  }
+  return [...keys].filter(Boolean);
+}
+
+function stockMatchKeys(value) {
+  const keys = new Set([itemKey(value)]);
+  for (const profile of meatProfiles(value)) {
+    if (profile.species && profile.cut) keys.add(`meat:${profile.species}:${profile.cut}`);
+    if (profile.species) keys.add(`meat:${profile.species}:any`);
+    if (profile.cut) keys.add(`meat:any:${profile.cut}`);
+  }
+  return [...keys].filter(Boolean);
+}
+
+export function availableIngredientMatches(available, ingredient) {
+  return ingredientRequirementKeys(ingredient).some((key) => available.has(key));
+}
+
+export function stockKeysForIngredient(value) {
+  return stockMatchKeys(value);
+}
+
 const union = (left, right) => [...new Set([...(Array.isArray(left) ? left : []), ...(Array.isArray(right) ? right : [])])];
 
 export function dedupeShoppingItems(items) {
