@@ -1,11 +1,32 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { clearLowStockForPrep, dedupeInventoryItems, dedupeShoppingItems, itemKey, moveInventoryItem, staplesFirst, withInventoryStaples } from "./inventory.js";
+import { availableIngredientMatches, clearLowStockForPrep, dedupeInventoryItems, dedupeShoppingItems, ingredientMatchesStock, itemKey, moveInventoryItem, staplesFirst, stockKeysForIngredient, withInventoryStaples } from "./inventory.js";
 
 test("item matching ignores case, spacing, punctuation and simple plurals", () => {
   assert.equal(itemKey("  Spring-Onions "), itemKey("spring onion"));
   assert.equal(itemKey("2 x Tomatoes"), itemKey("tomato"));
+});
+
+test("meat matching understands cuts, aliases, alternatives and quantities", () => {
+  assert.equal(ingredientMatchesStock("pork belly", "Pork belly slices 500g"), true);
+  assert.equal(ingredientMatchesStock("pork", "Pork belly slices 500g"), true);
+  assert.equal(ingredientMatchesStock("pork mince", "Pork belly slices 500g"), false);
+  assert.equal(ingredientMatchesStock("chicken thigh/cutlet", "Chicken cutlets 1 kg"), true);
+  assert.equal(ingredientMatchesStock("chicken or pork belly", "pork belly"), true);
+  assert.equal(ingredientMatchesStock("beef mince or chunks", "diced beef"), true);
+});
+
+test("similar cuts from different animals remain distinct", () => {
+  assert.equal(ingredientMatchesStock("beef mince", "pork mince"), false);
+  assert.equal(ingredientMatchesStock("chicken thigh", "pork thigh"), false);
+});
+
+test("available stock supports a generic animal without replacing a requested cut", () => {
+  const available = new Set(stockKeysForIngredient("Pork belly slices 500g"));
+  assert.equal(availableIngredientMatches(available, "pork"), true);
+  assert.equal(availableIngredientMatches(available, "pork belly"), true);
+  assert.equal(availableIngredientMatches(available, "pork mince"), false);
 });
 
 test("duplicate shopping rows merge without losing meal metadata", () => {
