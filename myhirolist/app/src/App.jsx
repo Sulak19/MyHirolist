@@ -3542,13 +3542,40 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
 
 function InventoryGroup({ title, icon: Icon, items, onRemove, onToggleLowStock, onMove, onSetStaple }) {
   const isPantry = title === "Pantry" || title === "Supplements";
+  const [open, setOpen] = useState(title === RECENT_SHOP);
   const sortedItems = staplesFirst(items);
+  const sectionId = `inventory-${title.toLowerCase().replace(/\s+/g, "-")}`;
   return (
     <div style={{ marginTop: 18 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 0.5 }}>
-        <Icon size={13} /> {title} ({items.length})
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={sectionId}
+        onClick={() => setOpen((current) => !current)}
+        style={{
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 8,
+          padding: "9px 10px",
+          border: `1px solid ${C.lineSoft}`,
+          borderRadius: 8,
+          background: C.card,
+          color: C.inkSoft,
+          cursor: "pointer",
+        }}
+      >
+        <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, textTransform: "uppercase", letterSpacing: 0.5 }}>
+          <Icon size={13} /> {title} ({items.length})
+        </span>
+        <ChevronDown
+          size={16}
+          aria-hidden="true"
+          style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s ease", flexShrink: 0 }}
+        />
+      </button>
+      {open && <div id={sectionId} style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
         {sortedItems.map((i) => {
           const days = i.expiry ? Math.ceil((new Date(i.expiry) - new Date()) / 86400000) : null;
           const urgent = (days !== null && days <= 3) || i.lowStock;
@@ -3615,7 +3642,7 @@ function InventoryGroup({ title, icon: Icon, items, onRemove, onToggleLowStock, 
           );
         })}
         {items.length === 0 && <Empty text={`Nothing in the ${title.toLowerCase()} yet.`} />}
-      </div>
+      </div>}
     </div>
   );
 }
