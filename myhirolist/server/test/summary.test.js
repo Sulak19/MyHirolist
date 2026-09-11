@@ -122,6 +122,15 @@ test("unknown dog food days left publishes as unknown, not as zero", () => {
 
 import { dinnerFor, describeToday } from "../summary.js";
 
+test("Friday dinner still uses the outgoing plan after Thursday evening rollover", () => {
+  const data = {
+    planWeekOf: "2026-08-31", weekPlan: { Friday: "new" },
+    previousWeekPlan: { weekOf: "2026-08-24", plan: { Friday: "old" } },
+    mealPrep: [{ id: "new", name: "New dinner" }, { id: "old", name: "Friday dinner" }],
+  };
+  assert.equal(dinnerFor(data, 0, localMs(2026, 8, 28)), "Friday dinner");
+});
+
 // A Wednesday, built locally so the weekday is unambiguous in any timezone.
 const WED = new Date(2026, 7, 26, 12, 0, 0).getTime();
 
