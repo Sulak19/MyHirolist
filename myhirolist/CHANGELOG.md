@@ -1,3 +1,9 @@
+## 1.0.45
+
+Merge pull request #32 from Sulak19/codex/prep-completion-memory
+
+Keep completed prep from returning after clearing
+
 ## 1.0.43
 
 Merge pull request #30 from Sulak19/codex/tick-odd-jobs-today
