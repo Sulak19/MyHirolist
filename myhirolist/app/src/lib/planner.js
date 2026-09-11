@@ -741,6 +741,10 @@ export function reconcilePrep(existing, tasks) {
       const task = wanted.get(item.key);
       kept.push({ ...item, label: task.label, stockName: task.stockName, dayOf: task.dayOf, meal: task.meal, week: task.week, kind: task.kind });
       seenKeys.add(item.key);
+    } else if (item.checked && item.hidden && item.kind !== "stock") {
+      // A cleared completion still counts if the meal returns this week.
+      // Stock tasks instead reset when replenished, allowing a new low cycle.
+      kept.push(item);
     }
     // Otherwise the task's meal has left the plan. Remove it even if it was
     // completed: Prep reflects the current plan, not a permanent history.
