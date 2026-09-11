@@ -1,3 +1,9 @@
+## 1.0.43
+
+Merge pull request #30 from Sulak19/codex/tick-odd-jobs-today
+
+Make Odd Jobs tickable on Today
+
 ## 1.0.41
 
 Merge pull request #28 from Sulak19/codex/meat-cut-matching
