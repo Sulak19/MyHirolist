@@ -85,6 +85,7 @@ export function buildAgenda(events, dates) {
     const entry = {
       name,
       refId,
+      kind,
       start: event.start,
       allDay: Boolean(event.allDay),
       calendar: event.calendar ?? null,

@@ -41,6 +41,7 @@ test("odd jobs appear once while interactive dog treatment cards are not duplica
 
   assert.deepEqual(day.other.map((item) => item.name), ["Fix fence"]);
   assert.equal(day.other[0].refId, "j1");
+  assert.equal(day.other[0].kind, "oddJob");
 });
 
 test("a day is grouped into dinner, chores, expiry and other", () => {

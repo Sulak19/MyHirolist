@@ -50,7 +50,7 @@ import {
 import { getToday } from "./lib/api.js";
 import { C, useTheme } from "./lib/theme.js";
 import { clearLowStockForPrep, dedupeInventoryItems, dedupeShoppingItems, itemKey, moveInventoryItem, staplesFirst, withInventoryStaples } from "./lib/inventory.js";
-import { shouldShowMealPrepToday } from "./lib/today.js";
+import { completeOddJob, oddJobsDueToday, shouldShowMealPrepToday } from "./lib/today.js";
 import { cleaningTaskStatus, sortCleaningTasks } from "./lib/cleaning.js";
 
 /* ---------------------------------------------------------
@@ -534,6 +534,7 @@ export default function HomeBase() {
             data={data}
             setTab={setTab}
             onCleaningChange={(v) => update("cleaning", v)}
+            onOddJobsChange={(v) => update("oddJobs", v)}
             onDogTreatmentGiven={(scheduleId) =>
               setData((current) => recordDogTreatment(current, scheduleId, treatmentDateKey(), uid))
             }
@@ -765,13 +766,18 @@ function agendaFromData(data) {
         expiry: data.inventory
           .filter((i) => i.expiry && (new Date(i.expiry) - now) / 86400000 <= 3)
           .map((i) => ({ name: i.name, refId: i.id, allDay: true })),
-        other: [],
+        other: oddJobsDueToday(data.oddJobs, now).map((job) => ({
+          name: job.name,
+          refId: job.id,
+          kind: "oddJob",
+          allDay: true,
+        })),
       },
     ],
   };
 }
 
-function DayCards({ data, onCleaningChange, onDogTreatmentGiven, setTab }) {
+function DayCards({ data, onCleaningChange, onOddJobsChange, onDogTreatmentGiven, setTab }) {
   const remote = useAgenda();
   const agenda = remote?.available ? remote : agendaFromData(data);
 
@@ -786,6 +792,9 @@ function DayCards({ data, onCleaningChange, onDogTreatmentGiven, setTab }) {
 
   const markDone = (id) =>
     onCleaningChange(data.cleaning.map((t) => (t.id === id ? { ...t, lastDone: new Date().toISOString() } : t)));
+  const markOddJobDone = (id) => onOddJobsChange(completeOddJob(data.oddJobs, id));
+  const knownOddJobIds = new Set(data.oddJobs.map((job) => job.id));
+  const completedOddJobIds = new Set(data.oddJobs.filter((job) => job.done).map((job) => job.id));
 
   const dueTreatments = dueDogTreatments(data.dogTreatments, data.dogFood.dogs);
   const readyPortions = data.batchCooking.filter((b) => b.portions > 0).reduce((sum, b) => sum + b.portions, 0);
@@ -796,11 +805,19 @@ function DayCards({ data, onCleaningChange, onDogTreatmentGiven, setTab }) {
       {agenda.days.map((day, index) => {
         const isToday = index === 0;
         const chores = day.chores.filter((c) => !(isToday && doneToday.has(c.refId)));
+        const oddJobs = day.other.filter((item) =>
+          (item.kind === "oddJob" || knownOddJobIds.has(item.refId)) && !completedOddJobIds.has(item.refId)
+        );
+        const other = day.other.filter((item) => item.kind !== "oddJob" && !knownOddJobIds.has(item.refId));
+        const openTasks = [
+          ...chores.map((task) => ({ ...task, taskType: "cleaning" })),
+          ...oddJobs.map((task) => ({ ...task, taskType: "oddJob" })),
+        ];
         const todayTasks = isToday && showMealPrep
-          ? [...chores, { name: "Meal prep", refId: "meal-prep", destination: "prep" }]
-          : chores;
+          ? [...openTasks, { name: "Meal prep", refId: "meal-prep", destination: "prep" }]
+          : openTasks;
         const treatments = isToday ? dueTreatments : [];
-        const isEmpty = !day.dinner && todayTasks.length === 0 && treatments.length === 0 && day.expiry.length === 0 && day.other.length === 0;
+        const isEmpty = !day.dinner && todayTasks.length === 0 && treatments.length === 0 && day.expiry.length === 0 && other.length === 0;
 
         return (
           <div key={day.date} style={{ ...styles.card, opacity: isToday ? 1 : 0.92 }}>
@@ -829,7 +846,11 @@ function DayCards({ data, onCleaningChange, onDogTreatmentGiven, setTab }) {
                     {todayTasks.map((c) => (
                       <button
                         key={c.refId ?? c.name}
-                        onClick={() => c.destination ? setTab(c.destination) : c.refId && markDone(c.refId)}
+                        onClick={() => {
+                          if (c.destination) setTab(c.destination);
+                          else if (c.taskType === "oddJob") markOddJobDone(c.refId);
+                          else if (c.refId) markDone(c.refId);
+                        }}
                         style={styles.choreChip}
                       >
                         <span style={styles.choreBox} />
@@ -869,10 +890,10 @@ function DayCards({ data, onCleaningChange, onDogTreatmentGiven, setTab }) {
               </div>
             )}
 
-            {day.other.length > 0 && (
+            {other.length > 0 && (
               <div style={{ marginTop: 12 }}>
                 <div style={styles.dayKicker}>Also on</div>
-                {day.other.map((o, i) => (
+                {other.map((o, i) => (
                   <div key={i} style={styles.dayList}>
                     {timeOf(o) && <span style={styles.dayTime}>{timeOf(o)} </span>}
                     {o.name}
@@ -889,7 +910,7 @@ function DayCards({ data, onCleaningChange, onDogTreatmentGiven, setTab }) {
   );
 }
 
-function HomeTab({ data, setTab, onCleaningChange, onDogTreatmentGiven }) {
+function HomeTab({ data, setTab, onCleaningChange, onOddJobsChange, onDogTreatmentGiven }) {
   const dogStats = data.dogFood.dogs.map((d) => ({
     ...d,
     daysLeft: d.packsPerDay > 0 ? Math.floor(d.packsOnHand / d.packsPerDay) : null,
@@ -932,6 +953,7 @@ function HomeTab({ data, setTab, onCleaningChange, onDogTreatmentGiven }) {
       <DayCards
         data={data}
         onCleaningChange={onCleaningChange}
+        onOddJobsChange={onOddJobsChange}
         onDogTreatmentGiven={onDogTreatmentGiven}
         setTab={setTab}
       />
