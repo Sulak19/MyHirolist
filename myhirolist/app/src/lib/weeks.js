@@ -3,7 +3,7 @@
 // `weekPlan` is this week's dinners, keyed by weekday name, and has been
 // since the first version of the app. Rather than change its shape - which
 // every read in the app and the server depends on - next week lives
-// alongside it as `nextWeekPlan` with the same shape. At 7 pm Friday, next
+// alongside it as `nextWeekPlan` with the same shape. At 7 pm Thursday, next
 // week becomes this week so the household can plan the following week over
 // the weekend.
 
@@ -47,19 +47,19 @@ export function mondayOf(date = new Date()) {
   return localDateKey(copy);
 }
 
-// The plan switches to the coming Monday at 7 pm Friday, in the device's
-// local time. Saturday and Sunday belong to that same newly promoted plan.
+// The plan switches to the coming Monday at 7 pm Thursday, in the device's
+// local time. Friday through Sunday belong to that same newly promoted plan.
 function activePlanMonday(date) {
   const monday = mondayOf(date);
   const weekday = date.getDay();
-  const afterFridayRollover = weekday === 6 || weekday === 0 || (weekday === 5 && date.getHours() >= 19);
-  return afterFridayRollover ? addDays(monday, 7) : monday;
+  const afterThursdayRollover = weekday === 0 || weekday >= 5 || (weekday === 4 && date.getHours() >= 19);
+  return afterThursdayRollover ? addDays(monday, 7) : monday;
 }
 
 /**
- * Promotes next week's plan into this week's at 7 pm Friday.
+ * Promotes next week's plan into this week's at 7 pm Thursday.
  *
- * `planWeekOf` records which Monday `weekPlan` belongs to. From Friday at
+ * `planWeekOf` records which Monday `weekPlan` belongs to. From Thursday at
  * 7 pm through Sunday, the active plan belongs to the coming Monday. If the
  * stamp is current (or missing on legacy data), nothing happens. If it is
  * older, next week's plan moves into weekPlan, nextWeekPlan empties, and the

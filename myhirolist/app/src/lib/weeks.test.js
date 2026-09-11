@@ -32,30 +32,31 @@ test("data already stamped for this week is returned by identity", () => {
 });
 
 
-test("Friday stays in the current week until 7 pm", () => {
+test("Thursday stays in the current week until 7 pm", () => {
   const data = { weekPlan: week("current"), nextWeekPlan: week("next"), planWeekOf: THIS_MONDAY };
-  const fridayAt659 = new Date(2026, 7, 28, 18, 59, 59);
+  const thursdayAt659 = new Date(2026, 7, 27, 18, 59, 59);
 
-  assert.equal(rolloverWeeks(data, fridayAt659), data);
+  assert.equal(rolloverWeeks(data, thursdayAt659), data);
 });
 
-test("Friday at 7 pm promotes next week", () => {
+test("Thursday at 7 pm promotes next week", () => {
   const data = { weekPlan: week("current"), nextWeekPlan: week("next"), planWeekOf: THIS_MONDAY };
-  const fridayAt7 = new Date(2026, 7, 28, 19, 0, 0);
-  const out = rolloverWeeks(data, fridayAt7);
+  const thursdayAt7 = new Date(2026, 7, 27, 19, 0, 0);
+  const out = rolloverWeeks(data, thursdayAt7);
 
   assert.deepEqual(out.weekPlan, week("next"));
   assert.deepEqual(out.nextWeekPlan, EMPTY_WEEK);
   assert.equal(out.planWeekOf, "2026-08-31");
 });
 
-test("the promoted plan does not roll again over the weekend or on Monday", () => {
-  const fridayAt7 = new Date(2026, 7, 28, 19, 0, 0);
+test("the promoted plan does not roll again on Friday, the weekend or Monday", () => {
+  const thursdayAt7 = new Date(2026, 7, 27, 19, 0, 0);
   const once = rolloverWeeks(
     { weekPlan: week("current"), nextWeekPlan: week("next"), planWeekOf: THIS_MONDAY },
-    fridayAt7
+    thursdayAt7
   );
 
+  assert.equal(rolloverWeeks(once, new Date(2026, 7, 28, 12)), once);
   assert.equal(rolloverWeeks(once, new Date(2026, 7, 29, 12)), once);
   assert.equal(rolloverWeeks(once, new Date(2026, 7, 31, 12)), once);
 });
