@@ -52,6 +52,7 @@ import { C, useTheme } from "./lib/theme.js";
 import { clearLowStockForPrep, dedupeInventoryItems, dedupeShoppingItems, itemKey, moveInventoryItem, staplesFirst, withInventoryStaples } from "./lib/inventory.js";
 import { completeOddJob, oddJobsDueToday, shouldShowMealPrepToday } from "./lib/today.js";
 import { cleaningTaskStatus, sortCleaningTasks } from "./lib/cleaning.js";
+import { clearPrepItems, visiblePrepItems } from "./lib/prepCompletion.js";
 
 /* ---------------------------------------------------------
    Home Base — a household dashboard
@@ -1983,8 +1984,8 @@ function PrepTab({ list, onChange, onStockPrepared }) {
     onChange(list.map((item) => (item.id === id ? { ...item, checked } : item)));
     if (checked) onStockPrepared?.(task);
   };
-  const remove = (id) => onChange(list.filter((t) => t.id !== id));
-  const clearCompleted = () => onChange(list.filter((t) => !t.checked));
+  const remove = (id) => onChange(clearPrepItems(list, (task) => task.id === id));
+  const clearCompleted = () => onChange(clearPrepItems(list));
   const addManual = () => {
     if (!name.trim()) return;
     onChange([...list, { id: uid(), meal: null, label: name.trim(), checked: false }]);
@@ -1996,10 +1997,11 @@ function PrepTab({ list, onChange, onStockPrepared }) {
     setShowAddPrep(false);
   };
 
-  const open = list.filter((t) => !t.checked);
-  const done = list.filter((t) => t.checked);
+  const visible = visiblePrepItems(list);
+  const open = visible.filter((t) => !t.checked);
+  const done = visible.filter((t) => t.checked);
   const thisWeek = open.filter((t) => t.week !== "next");
-  const progress = list.length ? Math.round((done.length / list.length) * 100) : 0;
+  const progress = visible.length ? Math.round((done.length / visible.length) * 100) : 0;
 
   const Task = ({ task }) => (
     <div style={styles.prepTask}>
@@ -2057,13 +2059,13 @@ function PrepTab({ list, onChange, onStockPrepared }) {
         Current-week cutting, marinating, portioning, and low-stock staple tasks. Cooking stays on the day.
       </div>
 
-      {list.length > 0 && (
+      {visible.length > 0 && (
         <div style={styles.prepProgressWrap}>
           <div style={styles.prepProgressBar}>
             <div style={{ ...styles.prepProgressFill, width: `${progress}%` }} />
           </div>
           <div style={styles.prepProgressText}>
-            {done.length === list.length ? "All done" : `${done.length} of ${list.length} done`}
+            {done.length === visible.length ? "All done" : `${done.length} of ${visible.length} done`}
           </div>
         </div>
       )}
@@ -2086,7 +2088,7 @@ function PrepTab({ list, onChange, onStockPrepared }) {
         </div>
       )}
 
-      {list.length === 0 && (
+      {visible.length === 0 && (
         <div style={{ marginTop: 14 }}>
           <Empty text="Nothing to prep — plan some meals and the jobs will show up here." />
         </div>

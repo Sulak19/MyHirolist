@@ -100,5 +100,10 @@ export function rolloverWeeks(data, now = new Date()) {
     nextWeekPlan: { ...EMPTY_WEEK },
     planWeekOf: thisMonday,
     mealHistory: history.slice(-HISTORY_LIMIT),
+    // Generated work belongs to one planning week. Drop its completion
+    // records at rollover so next week's jobs can be generated afresh.
+    ...(Array.isArray(data.weekendPrep) ? {
+      weekendPrep: data.weekendPrep.filter((task) => !task.source),
+    } : {}),
   };
 }
