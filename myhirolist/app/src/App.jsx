@@ -914,9 +914,8 @@ function HomeTab({ data, setTab, onCleaningChange, onOddJobsChange, onDogTreatme
   const dogStats = data.dogFood.dogs.map((d) => ({
     ...d,
     daysLeft: d.packsPerDay > 0 ? Math.floor(d.packsOnHand / d.packsPerDay) : null,
-    low: d.packsOnHand <= d.reorderAtPacks,
   }));
-  const lowStockDog = dogStats.some((d) => d.low) || data.dogFood.extras.some((e) => e.lowStock);
+  const dogExtrasLow = data.dogFood.extras.some((e) => e.lowStock);
   const minDaysLeft = dogStats.reduce((min, d) => (d.daysLeft !== null && (min === null || d.daysLeft < min) ? d.daysLeft : min), null);
   const expiringSoon = data.inventory.filter((i) => {
     if (!i.expiry) return false;
@@ -943,7 +942,6 @@ function HomeTab({ data, setTab, onCleaningChange, onOddJobsChange, onDogTreatme
     ...expiringSoon.map((i) => `${i.name} (expiring)`),
     ...data.inventory.filter((i) => i.lowStock).map((i) => `${i.name} (low)`),
     ...data.dogFood.extras.filter((e) => e.lowStock).map((e) => `${e.name} (dog, low)`),
-    ...(lowStockDog ? dogStats.filter((d) => d.low).map((d) => `${d.name}'s food (low)`) : []),
   ];
 
   const readyPortions = data.batchCooking.filter((b) => b.portions > 0).reduce((s, b) => s + b.portions, 0);
@@ -975,8 +973,8 @@ function HomeTab({ data, setTab, onCleaningChange, onOddJobsChange, onDogTreatme
         <SummaryCard
           icon={Dog}
           label="Dog food"
-          value={lowStockDog ? "Reorder soon" : `~${minDaysLeft ?? "?"} day${minDaysLeft === 1 ? "" : "s"} left`}
-          alert={lowStockDog}
+          value={dogExtrasLow ? "Treats running low" : `~${minDaysLeft ?? "?"} day${minDaysLeft === 1 ? "" : "s"} left`}
+          alert={dogExtrasLow}
           onClick={() => setTab("dogFood")}
         />
         <SummaryCard
@@ -2690,7 +2688,6 @@ function DogTab({ view, dogFood, onChange, dogShoppingList, onDogShoppingChange 
           <SectionTitle>Dog food</SectionTitle>
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         {dogFood.dogs.map((d) => {
-          const low = d.packsOnHand <= d.reorderAtPacks;
           const daysLeft = d.packsPerDay > 0 ? Math.floor(d.packsOnHand / d.packsPerDay) : null;
           const gPerDay = d.packSizeG * d.packsPerDay;
           return (
@@ -2705,12 +2702,6 @@ function DogTab({ view, dogFood, onChange, dogShoppingList, onDogShoppingChange 
                   <X size={14} />
                 </button>
               </div>
-
-              {low && (
-                <div style={{ display: "flex", alignItems: "center", gap: 6, color: C.rust, fontSize: 13, margin: "8px 0" }}>
-                  <AlertTriangle size={14} /> Time to reorder
-                </div>
-              )}
 
               <div style={{ display: "flex", gap: 12, marginTop: 10 }}>
                 <Field label="Food type" style={{ flex: 1 }}>
@@ -2734,9 +2725,6 @@ function DogTab({ view, dogFood, onChange, dogShoppingList, onDogShoppingChange 
                 </Field>
                 <Field label="Packs on hand">
                   <NumberStepper value={d.packsOnHand} onChange={(v) => setDog(d.id, { packsOnHand: Math.max(0, v) })} />
-                </Field>
-                <Field label="Reorder at">
-                  <NumberStepper value={d.reorderAtPacks} onChange={(v) => setDog(d.id, { reorderAtPacks: Math.max(0, v) })} />
                 </Field>
               </div>
 
