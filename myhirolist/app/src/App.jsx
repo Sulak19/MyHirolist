@@ -57,6 +57,7 @@ import { useHousehold } from "./lib/useHousehold.js";
 import { sameValue, undoChange } from "./lib/changes.js";
 import { applyCatalogue, findIngredient, saveIngredient, catalogueError } from "./lib/catalogue.js";
 import { planDates, addDays, planForDate } from "./lib/weeks.js";
+import { migrateDogFood, addFood, feedDogs, sharedDaysRemaining } from "./lib/dogFood.js";
 
 /* ---------------------------------------------------------
    Home Base — a household dashboard
@@ -243,7 +244,7 @@ const DEFAULT_DATA = {
 
 function normalizeHousehold(value) {
   const merged = rolloverWeeks(mergeWithDefaults(DEFAULT_DATA, value));
-  return applyCatalogue({ ...merged, shopping: dedupeShoppingItems(merged.shopping), inventory: withInventoryStaples(merged.inventory) });
+  return applyCatalogue({ ...merged, dogFood: migrateDogFood(merged.dogFood), shopping: dedupeShoppingItems(merged.shopping), inventory: withInventoryStaples(merged.inventory) });
 }
 
 /* Keeps the shopping list in step with the fortnight's meals.
@@ -495,6 +496,7 @@ export default function HomeBase() {
             onDogTreatmentGiven={(scheduleId) =>
               setData((current) => recordDogTreatment(current, scheduleId, treatmentDateKey(), uid))
             }
+            onDogFoodFed={(selection) => setData((current) => ({ ...current, dogFood: feedDogs(current.dogFood, selection) }))}
           />
         )}
         {tab === "plan" && (
@@ -872,7 +874,7 @@ function DayCards({ data, onCleaningChange, onOddJobsChange, onDogTreatmentGiven
   );
 }
 
-function HomeTab({ data, setTab, onCleaningChange, onOddJobsChange, onDogTreatmentGiven }) {
+function HomeTab({ data, setTab, onCleaningChange, onOddJobsChange, onDogTreatmentGiven, onDogFoodFed }) {
   const dogStats = data.dogFood.dogs.map((d) => ({
     ...d,
     daysLeft: d.packsPerDay > 0 ? Math.floor(d.packsOnHand / d.packsPerDay) : null,
@@ -917,6 +919,7 @@ function HomeTab({ data, setTab, onCleaningChange, onOddJobsChange, onDogTreatme
         onDogTreatmentGiven={onDogTreatmentGiven}
         setTab={setTab}
       />
+      <SharedDogFoodToday dogFood={data.dogFood} onFeed={onDogFoodFed} setTab={setTab} />
 
       <div style={styles.grid2}>
         <SummaryCard
@@ -2565,6 +2568,34 @@ function CleaningTab({ view, list, onChange, oddJobs, onOddJobsChange }) {
 }
 
 /* ---------------- DOG FOOD ---------------- */
+function SharedDogFoodToday({ dogFood, onFeed, setTab }) {
+  const foods = dogFood.foods || [];
+  const dogs = dogFood.dogs || [];
+  const [foodId, setFoodId] = useState(foods[0]?.id || "");
+  const selected = foods.find((food) => food.id === foodId);
+  if (!foods.length) return <div style={{ ...styles.card, marginBottom: 12 }}><strong>Dogs’ food today</strong><p style={{ fontSize: 13 }}>Add shared foods in Dogs → Food & treats.</p><button style={styles.linkBtnSmall} onClick={() => setTab("dogFood")}>Add food</button></div>;
+  return <div style={{ ...styles.card, marginBottom: 12 }}>
+    <div style={styles.cardLabel}>Dogs’ food today</div>
+    <div style={{ display: "flex", gap: 8, alignItems: "end", flexWrap: "wrap", marginTop: 8 }}>
+      <Field label="Food"><select style={styles.select} value={foodId} onChange={(e) => setFoodId(e.target.value)}>{foods.map(food => <option key={food.id} value={food.id}>{food.name}</option>)}</select></Field>
+      <button style={styles.addSpendBtn} disabled={!selected || !selected.servingsG} onClick={() => selected && onFeed({ foodId: selected.id, foodName: selected.name, amountG: selected.servingsG })}>✓ Fed both</button>
+    </div>
+    {selected && <div style={{ fontSize: 12.5, color: C.inkSoft, marginTop: 6 }}>{selected.servingsG ? `${selected.servingsG}g each · ${Math.max(0, selected.stockG || 0)}g left` : "Set a daily serving in Dog Food first."}</div>}
+    {selected && <details style={{ marginTop: 8 }}><summary>Edit individually</summary>{dogs.map(dog => <div key={dog.id} style={{ display: "flex", gap: 8, alignItems: "end", marginTop: 8, flexWrap: "wrap" }}><span style={{ minWidth: 70 }}>{dog.name}</span><select aria-label={`${dog.name} food`} style={styles.select} defaultValue={selected.id}>{foods.map(food => <option key={food.id} value={food.id}>{food.name}</option>)}</select><input aria-label={`${dog.name} amount`} style={{ ...styles.input, width: 90 }} type="number" min="0" defaultValue={selected.servingsG || ""} /></div>)}<button style={{ ...styles.addSpendBtn, marginTop: 10 }} onClick={(e) => { const rows = [...e.currentTarget.parentElement.querySelectorAll("input")]; const selects = [...e.currentTarget.parentElement.querySelectorAll("select")]; const selection = { }; dogs.forEach((dog, i) => { selection[dog.id] = { foodId: selects[i].value, foodName: foods.find(f => f.id === selects[i].value)?.name, amountG: Number(rows[i].value) || 0 }; }); onFeed(selection); }}>Record individual feeds</button></details>}
+  </div>;
+}
+
+function SharedDogFoodSection({ dogFood, onChange }) {
+  const [draft, setDraft] = useState({ name: "", type: "Raw", stockG: 0, packSizeG: 1000, servingsG: 0 });
+  const foods = dogFood.foods || [];
+  const save = () => { if (!draft.name.trim()) return; onChange(addFood(dogFood, draft)); setDraft({ name: "", type: "Raw", stockG: 0, packSizeG: 1000, servingsG: 0 }); };
+  return <div>
+    <div style={{ ...styles.card, marginBottom: 10 }}><strong>Total food remaining: </strong>{sharedDaysRemaining(dogFood) ? `approximately ${sharedDaysRemaining(dogFood).toFixed(1)} days for both dogs` : "add servings to calculate"}</div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{foods.map(food => <details key={food.id} style={styles.card}><summary><strong>{food.name}</strong> · {Math.max(0, food.stockG || 0)}g · {food.servingsG ? `~${(food.stockG / food.servingsG).toFixed(1)} days` : "serving not set"}</summary><div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}><Field label="Stock (g)"><NumberStepper value={food.stockG} onChange={v => onChange({ ...dogFood, foods: foods.map(f => f.id === food.id ? { ...f, stockG: Math.max(0, v) } : f) })} /></Field><Field label="Daily serving (g each)"><NumberStepper value={food.servingsG} onChange={v => onChange({ ...dogFood, foods: foods.map(f => f.id === food.id ? { ...f, servingsG: Math.max(0, v) } : f) })} /></Field></div></details>)}</div>
+    <div style={{ ...styles.card, marginTop: 10 }}><div style={styles.cardLabel}>Add shared food</div><div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}><input style={styles.input} placeholder="PMD BARF roll, 5 Hounds, Homemade" value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} /><input style={styles.input} type="number" min="0" placeholder="Stock g" value={draft.stockG} onChange={e => setDraft({ ...draft, stockG: e.target.value })} /><input style={styles.input} type="number" min="0" placeholder="Serving g each" value={draft.servingsG} onChange={e => setDraft({ ...draft, servingsG: e.target.value })} /><button style={styles.addSpendBtn} onClick={save}>Add food</button></div></div>
+  </div>;
+}
+
 function DogTab({ view, dogFood, onChange, dogShoppingList, onDogShoppingChange }) {
   const setDog = (id, patch) => onChange({ ...dogFood, dogs: dogFood.dogs.map((d) => (d.id === id ? { ...d, ...patch } : d)) });
   const addDog = () =>
@@ -2658,6 +2689,8 @@ function DogTab({ view, dogFood, onChange, dogShoppingList, onDogShoppingChange 
       {view === "dogFood" && (
         <>
           <SectionTitle>Dog food</SectionTitle>
+          <SharedDogFoodSection dogFood={dogFood} onChange={onChange} />
+          <details style={{ marginTop: 24 }}><summary>Dog profiles and previous stock settings</summary><div style={{ marginTop: 12 }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         {dogFood.dogs.map((d) => {
           const daysLeft = d.packsPerDay > 0 ? Math.floor(d.packsOnHand / d.packsPerDay) : null;
@@ -2716,7 +2749,7 @@ function DogTab({ view, dogFood, onChange, dogShoppingList, onDogShoppingChange 
         + Add another dog
       </button>
 
-      <div style={{ marginTop: 24 }}>
+          </div><div style={{ marginTop: 24 }}>
         <SectionTitle>Other foods & treats</SectionTitle>
         <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 10 }}>
           Extras that aren't part of the daily meal — bones, sardines, patties, treats.
@@ -2825,7 +2858,7 @@ function DogTab({ view, dogFood, onChange, dogShoppingList, onDogShoppingChange 
           ))}
           {dogFood.extras.length === 0 && <Empty text="Nothing added yet." />}
         </div>
-          </div>
+          </div></details>
         </>
       )}
 
