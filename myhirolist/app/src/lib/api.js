@@ -4,16 +4,21 @@
 // serves this app from a prefixed path like /api/hassio_ingress/<token>/, so an
 // absolute /api/data would escape the prefix and 404.
 
+import { mergeChanges, sameValue } from "./changes.js";
 const BASE = "./api";
 
 // Preview builds (GitHub Pages) have no server behind them. They run on
 // localStorage so the UI can be looked at, and the data is throwaway.
-const PREVIEW = import.meta.env.VITE_PREVIEW === "1";
+const PREVIEW = import.meta.env?.VITE_PREVIEW === "1";
 const PREVIEW_KEY = "myhirolist-preview-data";
 
 // The revision we last saw. Sent with every write so the server can tell us
 // when the other phone got there first.
 let currentRev = 0;
+let serverData = null;
+let saveQueue = Promise.resolve();
+export const getSyncedData = () => serverData;
+export const getSyncedRev = () => currentRev;
 
 async function asJson(res, what) {
   if (!res.ok) {
@@ -26,40 +31,43 @@ async function asJson(res, what) {
 export async function loadHouseholdData() {
   if (PREVIEW) {
     const raw = localStorage.getItem(PREVIEW_KEY);
-    return raw ? JSON.parse(raw) : null;
+    serverData = raw ? JSON.parse(raw) : null;
+    return serverData;
   }
   const payload = await asJson(await fetch(`${BASE}/data`), "Load");
   currentRev = payload.rev ?? 0;
+  serverData = payload.data ?? null;
   return payload.data ?? null;
 }
 
-export async function saveHouseholdData(dataObj) {
+export function saveHouseholdData(dataObj, base = serverData) {
+  const run = () => saveMergedData(dataObj, base);
+  const result = saveQueue.then(run, run);
+  saveQueue = result.catch(() => {});
+  return result;
+}
+
+async function saveMergedData(dataObj, base) {
   if (PREVIEW) {
     localStorage.setItem(PREVIEW_KEY, JSON.stringify(dataObj));
-    return;
+    serverData = dataObj;
+    currentRev++;
+    return { data: dataObj, rev: currentRev };
   }
-
-  const put = (rev) =>
-    fetch(`${BASE}/data`, {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const latest = await asJson(await fetch(`${BASE}/data`), "Refresh before save");
+    const merged = mergeChanges(base, dataObj, latest.data ?? null);
+    if (sameValue(merged, latest.data)) return latest;
+    const res = await fetch(`${BASE}/data`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rev, data: dataObj }),
+      body: JSON.stringify({ rev: latest.rev, data: merged }),
     });
-
-  let res = await put(currentRev);
-
-  // 409 means someone else saved between our last read and this write. The
-  // live subscription has already handed their version to the UI, so we take
-  // their revision number and let this save land on top. One retry only --
-  // if it conflicts twice, something is wrong and the error should surface.
-  if (res.status === 409) {
-    const conflict = await res.json().catch(() => ({}));
-    if (typeof conflict.rev === "number") currentRev = conflict.rev;
-    res = await put(currentRev);
+    if (res.status === 409) continue;
+    const saved = await asJson(res, "Save");
+    return { ...saved, data: merged };
   }
-
-  const payload = await asJson(res, "Save");
-  currentRev = payload.rev ?? currentRev;
+  throw new Error("Changes are arriving from another device. Please retry saving.");
 }
 
 // Calls back whenever anyone else saves. Returns an unsubscribe function.
@@ -71,8 +79,11 @@ export function subscribeToHouseholdData(onChange) {
   source.addEventListener("household", (event) => {
     try {
       const payload = JSON.parse(event.data);
-      if (typeof payload.rev === "number") currentRev = payload.rev;
-      if (payload.data) onChange(payload.data);
+      if (typeof payload.rev !== "number" || payload.rev <= currentRev) return;
+      const previous = serverData;
+      currentRev = payload.rev;
+      serverData = payload.data;
+      if (payload.data) onChange(payload.data, previous, payload.rev);
     } catch {
       // A malformed frame is not worth tearing the stream down for.
     }

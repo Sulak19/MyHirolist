@@ -137,13 +137,15 @@ export function planEvents(data, nowMs) {
   if (!data) return [];
 
   const events = [];
-  const monday = mondayOf(nowMs);
+  const monday = parseDateKey(data.planWeekOf) ? data.planWeekOf : mondayOf(nowMs);
 
   // Dinners: this week and next. Each plan is keyed by weekday name; the
-  // app rolls nextWeekPlan into weekPlan on Monday, so the two never overlap.
+  // app stamps each plan's Monday, including after the Thursday rollover.
   const weeks = [
     [data.weekPlan, monday],
     [data.nextWeekPlan, addDays(monday, 7)],
+    ...(parseDateKey(data.previousWeekPlan?.weekOf) && data.previousWeekPlan.weekOf < monday
+      ? [[data.previousWeekPlan.plan, data.previousWeekPlan.weekOf]] : []),
   ];
   for (const [plan, weekStart] of weeks) {
     if (!plan || typeof plan !== "object") continue;

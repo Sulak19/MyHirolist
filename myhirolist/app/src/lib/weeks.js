@@ -47,6 +47,23 @@ export function mondayOf(date = new Date()) {
   return localDateKey(copy);
 }
 
+export function planDates(planWeekOf, next = false, now = new Date()) {
+  const start = addDays(planWeekOf || activePlanMonday(now), next ? 7 : 0);
+  const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 19);
+  cutoff.setDate(cutoff.getDate() + ((4 - now.getDay() + 7) % 7));
+  if (cutoff <= now) cutoff.setDate(cutoff.getDate() + 7);
+  return { start, end: addDays(start, 4), rollover: cutoff };
+}
+
+export function planForDate(data, date = new Date()) {
+  const monday = mondayOf(date);
+  const active = data.planWeekOf || monday;
+  if (monday === active) return data.weekPlan;
+  if (monday === addDays(active, 7)) return data.nextWeekPlan;
+  if (monday === data.previousWeekPlan?.weekOf) return data.previousWeekPlan.plan;
+  return {};
+}
+
 // The plan switches to the coming Monday at 7 pm Thursday, in the device's
 // local time. Friday through Sunday belong to that same newly promoted plan.
 function activePlanMonday(date) {
@@ -99,6 +116,7 @@ export function rolloverWeeks(data, now = new Date()) {
     weekPlan: exactlyOneWeek ? { ...EMPTY_WEEK, ...(data.nextWeekPlan ?? {}) } : { ...EMPTY_WEEK },
     nextWeekPlan: { ...EMPTY_WEEK },
     planWeekOf: thisMonday,
+    previousWeekPlan: { plan: data.weekPlan, weekOf: stamped },
     mealHistory: history.slice(-HISTORY_LIMIT),
     // Generated work belongs to one planning week. Drop its completion
     // records at rollover so next week's jobs can be generated afresh.

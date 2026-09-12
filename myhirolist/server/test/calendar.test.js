@@ -59,6 +59,18 @@ test("as-needed tasks never get a date", () => {
 
 // --- planning ----------------------------------------------------------
 
+test("early rollover keeps this Friday and the promoted plan on their actual dates", () => {
+  const data = {
+    planWeekOf: "2026-08-31", weekPlan: { Monday: "new" },
+    previousWeekPlan: { weekOf: "2026-08-24", plan: { Friday: "old" } },
+    mealPrep: [{ id: "new", name: "New dinner" }, { id: "old", name: "Friday dinner" }],
+  };
+  const meals = planEvents(data, new Date(2026, 7, 27, 20).getTime()).filter(e => e.key.startsWith("meal:"));
+  assert.ok(meals.some(e => e.date === "2026-08-28" && e.summary === "Dinner: Friday dinner"));
+  assert.ok(meals.some(e => e.date === "2026-08-31" && e.summary === "Dinner: New dinner"));
+  assert.equal(meals.length, 2);
+});
+
 test("dinners land on this week's weekdays", () => {
   const data = {
     mealPrep: [{ id: "m1", name: "Karaage" }],

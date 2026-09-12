@@ -51,8 +51,14 @@ export function dinnerFor(data, dayOffset, nowMs) {
 
   // Tomorrow can fall in next week (on a Sunday), so pick the plan whose
   // Monday matches the target date's week.
-  const sameWeek = mondayKey(date) === mondayKey(today);
-  const source = sameWeek ? data?.weekPlan : data?.nextWeekPlan;
+  const activeMonday = data?.planWeekOf ? new Date(`${data.planWeekOf}T00:00:00`).getTime() : mondayKey(today);
+  const nextMonday = new Date(activeMonday);
+  nextMonday.setDate(nextMonday.getDate() + 7);
+  const targetMonday = mondayKey(date);
+  const previousMonday = data?.previousWeekPlan?.weekOf ? new Date(`${data.previousWeekPlan.weekOf}T00:00:00`).getTime() : null;
+  const source = targetMonday === activeMonday ? data?.weekPlan
+    : targetMonday === nextMonday.getTime() ? data?.nextWeekPlan
+    : targetMonday === previousMonday ? data?.previousWeekPlan?.plan : null;
   const plan = source && typeof source === "object" ? source : {};
   const value = plan[weekday];
   if (!value) return null;

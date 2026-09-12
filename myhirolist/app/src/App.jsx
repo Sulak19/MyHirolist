@@ -21,7 +21,7 @@ import {
   BookOpen,
   Boxes,
 } from "lucide-react";
-import { loadHouseholdData, saveHouseholdData, subscribeToHouseholdData, scanImageWithClaude, listSnapshots, restoreSnapshot } from "./lib/api.js";
+import { scanImageWithClaude, listSnapshots, restoreSnapshot } from "./lib/api.js";
 import { useScanAvailable } from "./lib/useCapabilities.js";
 import { mergeWithDefaults } from "./lib/merge.js";
 import { rolloverWeeks, EMPTY_WEEK } from "./lib/weeks.js";
@@ -53,6 +53,10 @@ import { clearLowStockForPrep, dedupeInventoryItems, dedupeShoppingItems, itemKe
 import { completeOddJob, oddJobsDueToday, shouldShowMealPrepToday } from "./lib/today.js";
 import { cleaningTaskStatus, sortCleaningTasks } from "./lib/cleaning.js";
 import { clearPrepItems, visiblePrepItems } from "./lib/prepCompletion.js";
+import { useHousehold } from "./lib/useHousehold.js";
+import { sameValue, undoChange } from "./lib/changes.js";
+import { applyCatalogue, findIngredient, saveIngredient, catalogueError } from "./lib/catalogue.js";
+import { planDates, addDays, planForDate } from "./lib/weeks.js";
 
 /* ---------------------------------------------------------
    Home Base — a household dashboard
@@ -143,6 +147,7 @@ const DEFAULT_DATA = {
   ],
   shopping: [],
   weekendPrep: [],
+  ingredientCatalogue: [],
   mealSelection: [],
   weekPlan: { Monday: null, Tuesday: null, Wednesday: null, Thursday: null, Friday: null },
   nextWeekPlan: { Monday: null, Tuesday: null, Wednesday: null, Thursday: null, Friday: null },
@@ -236,22 +241,10 @@ const DEFAULT_DATA = {
   batchCooking: [],
 };
 
-async function loadState(setData, setLoaded) {
-  try {
-    const remote = await loadHouseholdData();
-    const merged = rolloverWeeks(mergeWithDefaults(DEFAULT_DATA, remote));
-    setData({ ...merged, shopping: dedupeShoppingItems(merged.shopping), inventory: withInventoryStaples(merged.inventory) });
-  } catch (e) {
-    console.error("load failed", e);
-    setData({ ...DEFAULT_DATA, inventory: withInventoryStaples(DEFAULT_DATA.inventory) });
-  } finally {
-    setLoaded(true);
-  }
+function normalizeHousehold(value) {
+  const merged = rolloverWeeks(mergeWithDefaults(DEFAULT_DATA, value));
+  return applyCatalogue({ ...merged, shopping: dedupeShoppingItems(merged.shopping), inventory: withInventoryStaples(merged.inventory) });
 }
-
-// Typing in a text field updates `data` on every keystroke, so saving straight
-// away meant one write -- and one live-sync broadcast to the other phone --
-// per character. Waiting for a pause collapses a burst of typing into one save.
 
 /* Keeps the shopping list in step with the fortnight's meals.
 
@@ -321,63 +314,6 @@ function usePlanPrep(data, setData, ready) {
   }, [signature, ready]);
 }
 
-const SAVE_DEBOUNCE_MS = 800;
-
-function useAutoSave(data, ready, setSaveStatus, setSaveError, isRemoteUpdateRef) {
-  // Whatever has not been written yet, so it can be forced out if the phone
-  // is locked or the tab closed mid-edit.
-  const pendingRef = useRef(null);
-
-  const flush = useCallback(() => {
-    const pending = pendingRef.current;
-    if (!pending) return;
-    pendingRef.current = null;
-
-    saveHouseholdData(pending)
-      .then(() => setSaveStatus("saved"))
-      .catch((e) => {
-        console.error("save failed", e);
-        setSaveStatus("error");
-        setSaveError(e?.message || String(e) || "unknown error");
-      });
-  }, [setSaveStatus, setSaveError]);
-
-  useEffect(() => {
-    if (!ready) return;
-
-    // Skip saving right after applying an update that came in from the live
-    // subscription (i.e. your partner's phone) - otherwise we'd immediately
-    // write it straight back and bounce updates in a loop.
-    if (isRemoteUpdateRef.current) {
-      isRemoteUpdateRef.current = false;
-      return;
-    }
-
-    pendingRef.current = data;
-    setSaveStatus("saving");
-
-    const timer = setTimeout(flush, SAVE_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [data, ready, flush, isRemoteUpdateRef, setSaveStatus]);
-
-  // Backgrounding the app is the normal way to leave it on a phone, so an
-  // edit still sitting in the debounce window has to be written out then
-  // rather than quietly lost.
-  useEffect(() => {
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "hidden") flush();
-    };
-
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    window.addEventListener("pagehide", flush);
-
-    return () => {
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-      window.removeEventListener("pagehide", flush);
-    };
-  }, [flush]);
-}
-
 // Keep the top level organised by household area, with related screens grouped
 // underneath. `tab` is still
 // the leaf screen key, so every existing setTab("fridge") link and every
@@ -428,37 +364,53 @@ const IN_HOME_ASSISTANT = typeof window !== "undefined" && window.location.pathn
 
 export default function HomeBase() {
   useTheme();
-  const [data, setData] = useState(null);
-  const [ready, setReady] = useState(false);
+  const { data, setData: setDataRaw, ready, saveStatus, saveError, retry } = useHousehold(normalizeHousehold);
+  const undoStack = useRef([]);
+  const [undoCount, setUndoCount] = useState(0);
+  const setData = useCallback((updater) => {
+    setDataRaw((current) => {
+      const next = applyCatalogue(typeof updater === "function" ? updater(current) : updater);
+      if (current && !sameValue(current, next)) {
+        const last = undoStack.current.at(-1);
+        // Group one action's related updates (e.g. purchase and stock move).
+        if (last && Date.now() - last.time < 400) {
+          last.after = next;
+          last.time = Date.now();
+        } else {
+          undoStack.current = [...undoStack.current.slice(-19), { before: current, after: next, time: Date.now() }];
+        }
+        setUndoCount(undoStack.current.length);
+      }
+      return next;
+    });
+  }, []);
+  const undo = () => {
+    const change = undoStack.current.pop();
+    if (!change) return;
+    setDataRaw((current) => undoChange(change, current));
+    setUndoCount(undoStack.current.length);
+  };
   const [tab, setTab] = useState("home");
   const [planWeek, setPlanWeek] = useState("this"); // "this" | "next"
-  const [saveStatus, setSaveStatus] = useState("idle");
-  const [saveError, setSaveError] = useState("");
-  const isRemoteUpdateRef = useRef(false);
-
+  usePlanShopping(data, setDataRaw, ready);
+  usePlanPrep(data, setDataRaw, ready);
   useEffect(() => {
-    loadState(setData, setReady);
-  }, []);
-  useAutoSave(data, ready, setSaveStatus, setSaveError, isRemoteUpdateRef);
-  usePlanShopping(data, setData, ready);
-  usePlanPrep(data, setData, ready);
-
-  // Live sync: when your partner's phone saves a change, it shows up here
-  // automatically — no refresh needed.
+    if (!ready) return;
+    const advance = () => setDataRaw((current) => rolloverWeeks(current));
+    const timer = setInterval(advance, 30000);
+    document.addEventListener("visibilitychange", advance);
+    return () => { clearInterval(timer); document.removeEventListener("visibilitychange", advance); };
+  }, [ready]);
   useEffect(() => {
-    const unsubscribe = subscribeToHouseholdData((remoteData) => {
-      isRemoteUpdateRef.current = true;
-      const merged = rolloverWeeks(mergeWithDefaults(DEFAULT_DATA, remoteData));
-      setData({ ...merged, shopping: dedupeShoppingItems(merged.shopping), inventory: withInventoryStaples(merged.inventory) });
-    });
-    return unsubscribe;
-  }, []);
+    undoStack.current = [];
+    setUndoCount(0);
+  }, [data?.planWeekOf]);
 
   if (!data) {
     return (
       <div style={{ ...styles.page, display: "flex", alignItems: "center", justifyContent: "center" }}>
         <style>{FONT_IMPORT}</style>
-        <div style={{ fontFamily: "'IBM Plex Mono', monospace", color: C.sage }}>loading…</div>
+        <div style={{ fontFamily: "'IBM Plex Mono', monospace", color: C.sage }}>{saveStatus === "error" ? `Unable to load: ${saveError}` : "loading…"}{saveStatus === "error" && <button onClick={() => window.location.reload()}>Retry</button>}</div>
       </div>
     );
   }
@@ -483,7 +435,7 @@ export default function HomeBase() {
         </header>
       )}
       {saveStatus === "error" && (
-        <div style={styles.saveStatusBar}>{`⚠ Save failed: ${saveError}`}</div>
+        <div style={styles.saveStatusBar}>{`⚠ Save failed: ${saveError}`} <button onClick={retry}>Retry save</button></div>
       )}
 
       <nav style={styles.tabStrip}>
@@ -530,6 +482,10 @@ export default function HomeBase() {
       )}
 
       <main style={styles.main}>
+        {undoCount > 0 && <div role="status" style={{ ...styles.card, padding: 10 }}>
+          <button style={styles.linkBtnSmall} onClick={undo}>Undo last change</button>
+          <span style={{ fontSize: 12, marginLeft: 12 }}>Available until you close the app</span>
+        </div>}
         {tab === "home" && (
           <HomeTab
             data={data}
@@ -543,6 +499,8 @@ export default function HomeBase() {
         )}
         {tab === "plan" && (
           <PlanTab
+            planWeekOf={data.planWeekOf}
+            previousWeekPlan={data.previousWeekPlan}
             meals={data.mealPrep}
             selectedMealIds={data.mealSelection}
             plan={planWeek === "next" ? data.nextWeekPlan ?? EMPTY_WEEK : data.weekPlan}
@@ -690,6 +648,7 @@ export default function HomeBase() {
         )}
         {tab === "fridge" && (
           <FridgeTab
+            catalogue={data.ingredientCatalogue || []}
             list={data.inventory}
             onChange={(v) => update("inventory", v)}
             shoppingList={data.shopping}
@@ -697,6 +656,8 @@ export default function HomeBase() {
           />
         )}
         {tab === "batch" && <BatchTab list={data.batchCooking} onChange={(v) => update("batchCooking", v)} />}
+        {tab === "fridge" && <IngredientCatalogue catalogue={data.ingredientCatalogue || []}
+          onSave={(draft) => setData((current) => saveIngredient(current, draft))} />}
       </main>
 
       {(groupOf(tab).key === "house" || groupOf(tab).key === "dogs") && <RestorePanel />}
@@ -755,7 +716,7 @@ function agendaFromData(data) {
   const now = new Date();
   const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const weekday = DAY_LABELS[now.getDay()];
-  const mealId = data.weekPlan?.[weekday];
+  const mealId = planForDate(data, now)?.[weekday];
   const meal = mealId ? data.mealPrep.find((m) => m.id === mealId) : null;
   return {
     available: false,
@@ -1146,7 +1107,9 @@ function TapSelect({ value, valueLabel, options, searchOptions = options, onChan
   );
 }
 
-function PlanTab({ meals, selectedMealIds, plan, onPlanChange, planAuto, planWeek: activeWeek, onPlanWeekChange, otherWeekPlan, thisWeekPlan, nextWeekPlan, mealHistory, shoppingList, onShoppingChange, dismissedShopping, onDismissedShoppingChange, prepList, onPrepChange, batchList, onBatchChange, inventory }) {
+function PlanTab({ planWeekOf, previousWeekPlan, meals, selectedMealIds, plan, onPlanChange, planAuto, planWeek: activeWeek, onPlanWeekChange, otherWeekPlan, thisWeekPlan, nextWeekPlan, mealHistory, shoppingList, onShoppingChange, dismissedShopping, onDismissedShoppingChange, prepList, onPrepChange, batchList, onBatchChange, inventory }) {
+  const dates = planDates(planWeekOf, activeWeek === "next");
+  const displayDate = (key) => new Date(`${key}T12:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
   const planContext = { meals, batches: batchList, inventory, mealHistory, otherWeekPlan };
   const selectedMealIdSet = new Set(selectedMealIds || []);
   const selectedMealOptions = meals
@@ -1354,6 +1317,13 @@ function PlanTab({ meals, selectedMealIds, plan, onPlanChange, planAuto, planWee
       <button style={styles.fillWeekBtn} onClick={suggestEmptyDays}>
         <Shuffle size={14} /> Suggest for the empty days
       </button>
+      <p style={{ fontSize: 13 }}>{displayDate(dates.start)} – {displayDate(dates.end)}<br />
+        Next rollover: {dates.rollover.toLocaleString(undefined, { weekday: "long", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })} (device local time)
+      </p>
+      {previousWeekPlan?.weekOf && <details style={styles.card}>
+        <summary>Previous plan · {displayDate(previousWeekPlan.weekOf)}</summary>
+        {WEEKDAYS.map((day) => <p key={day}>{day}: {meals.find((m) => m.id === previousWeekPlan.plan?.[day])?.name || batchList.find((b) => `batch:${b.id}` === previousWeekPlan.plan?.[day])?.name || "Nothing planned"}</p>)}
+      </details>}
       <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 12 }}>
         Empty days auto-suggest from batch portions first, then what's in stock — or choose any saved meal for any day.
       </div>
@@ -1363,7 +1333,7 @@ function PlanTab({ meals, selectedMealIds, plan, onPlanChange, planAuto, planWee
           const suggestion = suggestions[day];
           return (
             <div key={day} style={styles.card}>
-              <div style={{ fontSize: 11, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>{day}</div>
+              <div style={{ fontSize: 11, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>{day} · {displayDate(addDays(dates.start, WEEKDAYS.indexOf(day)))}</div>
 
               {batch ? (
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -3285,7 +3255,45 @@ function round1(n) {
 }
 
 /* ---------------- FRIDGE / FREEZER ---------------- */
-function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
+function IngredientCatalogue({ catalogue, onSave }) {
+  const [query, setQuery] = useState("");
+  const [draft, setDraft] = useState(null);
+  const [error, setError] = useState("");
+  const matches = catalogue.filter((entry) => [entry.name, ...(entry.aliases || [])].join(" ").toLowerCase().includes(query.toLowerCase()));
+  return <details style={styles.card}>
+    <summary>Ingredient catalogue · {catalogue.length}</summary>
+    <p style={{ fontSize: 13 }}>Shared names for Meals, Kitchen and Shopping. Aliases mean the same ingredient; keep different meat cuts separate. Defaults apply when adding Kitchen items.</p>
+    <SearchInput value={query} onChange={setQuery} placeholder="Find an ingredient or alias" />
+    <select aria-label="Edit ingredient" style={{ ...styles.select, width: "100%", marginTop: 8 }} value={draft?.id || ""}
+      onChange={(e) => { setDraft(catalogue.find((entry) => entry.id === e.target.value) || null); setError(""); }}>
+      <option value="">Choose an ingredient</option>
+      {matches.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+    </select>
+    {draft && <form onSubmit={(e) => {
+      e.preventDefault();
+      const message = catalogueError(catalogue.filter((entry) => entry.id !== draft.mergeId), draft);
+      if (message) { setError(message); return; }
+      onSave(draft); setDraft(null); setError("");
+    }}>
+      <Field label="Shared name"><input required style={styles.input} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></Field>
+      <Field label="Aliases (comma separated)"><input style={styles.input} value={(draft.aliases || []).join(",")}
+        onChange={(e) => setDraft({ ...draft, aliases: e.target.value.split(",") })} /></Field>
+      <Field label="Default storage"><select style={styles.select} value={draft.location} onChange={(e) => setDraft({ ...draft, location: e.target.value })}>
+        {["Fridge", "Freezer", "Pantry", "Supplements"].map((loc) => <option key={loc}>{loc}</option>)}
+      </select></Field>
+      <label><input type="checkbox" checked={draft.staple} onChange={(e) => setDraft({ ...draft, staple: e.target.checked })} /> Staple by default</label>
+      <Field label="Combine an existing duplicate (optional)"><select style={{ ...styles.select, width: "100%" }} value={draft.mergeId || ""} onChange={(e) => setDraft({ ...draft, mergeId: e.target.value })}>
+        <option value="">Keep ingredients separate</option>
+        {catalogue.filter((entry) => entry.id !== draft.id).map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+      </select></Field>
+      {error && <p role="alert">{error}</p>}
+      <div style={{ marginTop: 10 }}><button type="submit" style={styles.addSpendBtn}>Save ingredient</button>
+        <button type="button" style={styles.linkBtnSmall} onClick={() => setDraft(null)}>Cancel</button></div>
+    </form>}
+  </details>;
+}
+
+function FridgeTab({ catalogue, list, onChange, shoppingList, onShoppingChange }) {
   const [name, setName] = useState("");
   const [loc, setLoc] = useState("Fridge");
   const [staple, setStaple] = useState(false);
@@ -3499,11 +3507,17 @@ function FridgeTab({ list, onChange, shoppingList, onShoppingChange }) {
       <div style={styles.kitchenAddGrid}>
         <input
           aria-label="Kitchen item"
+          list="kitchen-ingredients"
           style={{ ...styles.input, gridColumn: "1 / -1", width: "100%", minWidth: 0, boxSizing: "border-box" }}
           placeholder="Item"
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => {
+            setName(e.target.value);
+            const entry = findIngredient(catalogue, e.target.value);
+            if (entry) { setLoc(entry.location); setStaple(entry.staple); }
+          }}
         />
+        <datalist id="kitchen-ingredients">{catalogue.map((entry) => <option key={entry.id} value={entry.name} />)}</datalist>
         <select aria-label="Storage location" style={{ ...styles.select, width: "100%", minWidth: 0 }} value={loc} onChange={(e) => setLoc(e.target.value)}>
           <option>Fridge</option>
           <option>Freezer</option>

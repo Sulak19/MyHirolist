@@ -1,7 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { rolloverWeeks, mondayOf, EMPTY_WEEK } from "./weeks.js";
+import { rolloverWeeks, mondayOf, EMPTY_WEEK, planDates, planForDate } from "./weeks.js";
+
+test("dated plans and previous Friday remain correct after Thursday rollover", () => {
+  const now = new Date(2026, 8, 10, 19);
+  const result = rolloverWeeks({ planWeekOf: "2026-09-07", weekPlan: { Friday: "old" }, nextWeekPlan: { Friday: "new" } }, now);
+  assert.equal(planDates(result.planWeekOf, false, now).start, "2026-09-14");
+  assert.equal(planDates(result.planWeekOf, true, now).end, "2026-09-25");
+  assert.equal(planDates(result.planWeekOf, false, now).rollover.getDate(), 17);
+  assert.equal(planForDate(result, new Date(2026, 8, 11)).Friday, "old");
+  assert.equal(planForDate(result, new Date(2026, 8, 18)).Friday, "new");
+});
 
 // All dates built locally so the weekday is unambiguous in any timezone.
 const WED_24_AUG = new Date(2026, 7, 26, 12); // Wednesday; its Monday is 24 Aug
