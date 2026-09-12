@@ -1,3 +1,9 @@
+## 1.0.46
+
+Merge pull request #33 from Sulak19/codex/reliability-and-ingredients
+
+Protect household edits, add Undo and dated plans, and unify ingredients
+
 ## 1.0.45
 
 Merge pull request #32 from Sulak19/codex/prep-completion-memory
