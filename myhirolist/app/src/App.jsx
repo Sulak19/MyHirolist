@@ -27,6 +27,7 @@ import { mergeWithDefaults } from "./lib/merge.js";
 import { retirePlannedBatches, rolloverWeeks, EMPTY_WEEK } from "./lib/weeks.js";
 import {
   planWeek,
+  mealSuggestionKey,
   rankedMealSuggestions,
   replan,
   shoppingNeeds,
@@ -1120,6 +1121,29 @@ function PlanTab({ planWeekOf, previousWeekPlan, meals, selectedMealIds, plan, o
   const allMealOptions = [...meals]
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((savedMeal) => ({ value: savedMeal.id, label: savedMeal.name }));
+  const [suggestions, setSuggestions] = useState({});
+  const shownMealKeys = useRef(new Set());
+  const shownBatchIds = useRef(new Set());
+  const suggestionWeek = useRef(planWeekOf);
+  const suggestionInputSignature = useRef("");
+
+  const resetSuggestionMemoryForNewFortnight = () => {
+    if (suggestionWeek.current === planWeekOf) return;
+    suggestionWeek.current = planWeekOf;
+    shownMealKeys.current = new Set();
+    shownBatchIds.current = new Set();
+  };
+  const excludedShownMealIds = () => meals
+    .filter((meal) => shownMealKeys.current.has(mealSuggestionKey(meal)))
+    .map((meal) => meal.id);
+  const rememberSuggestions = (cards) => {
+    Object.values(cards).forEach((suggestion) => {
+      if (suggestion?.type === "batch") shownBatchIds.current.add(suggestion.batchId);
+      if (suggestion?.type !== "meal") return;
+      const meal = meals.find((candidate) => candidate.id === suggestion.mealId);
+      if (meal) shownMealKeys.current.add(mealSuggestionKey(meal));
+    });
+  };
 
   const suggestionCardsFor = (proposed) => {
     const next = {};
@@ -1141,8 +1165,16 @@ function PlanTab({ planWeekOf, previousWeekPlan, meals, selectedMealIds, plan, o
   // Suggests rather than decides: the empty days get a proposal each, which
   // you accept one at a time. Nothing is written to the plan here.
   const suggestEmptyDays = () => {
-    const proposed = planWeek({ ...planContext, existingPlan: plan });
-    setSuggestions((prev) => ({ ...prev, ...suggestionCardsFor(proposed) }));
+    resetSuggestionMemoryForNewFortnight();
+    const proposed = planWeek({
+      ...planContext,
+      existingPlan: plan,
+      excludedMealIds: excludedShownMealIds(),
+      excludedBatchIds: [...shownBatchIds.current],
+    });
+    const next = suggestionCardsFor(proposed);
+    rememberSuggestions(next);
+    setSuggestions(next);
   };
 
   // The plan is a suggestion, not a decision. Pick a different meal for one
@@ -1171,8 +1203,6 @@ function PlanTab({ planWeekOf, previousWeekPlan, meals, selectedMealIds, plan, o
     });
     onPlanChange(next, auto);
   };
-
-  const [suggestions, setSuggestions] = useState({}); // day -> { type: 'batch'|'meal', batchId?, mealId?, label, tag? }
 
   const setDay = (day, mealId) => setDayAndReplan(day, mealId);
 
@@ -1220,8 +1250,19 @@ function PlanTab({ planWeekOf, previousWeekPlan, meals, selectedMealIds, plan, o
   // Keep the visible suggestions on the same tested planner rules as the
   // button: existing batch portions, stocked proteins and recent history.
   useEffect(() => {
-    const proposed = planWeek({ ...planContext, existingPlan: plan });
-    setSuggestions(suggestionCardsFor(proposed));
+    const inputSignature = JSON.stringify([planWeekOf, plan, meals, batchList, inventory, mealHistory, otherWeekPlan]);
+    if (suggestionInputSignature.current === inputSignature) return;
+    suggestionInputSignature.current = inputSignature;
+    resetSuggestionMemoryForNewFortnight();
+    const proposed = planWeek({
+      ...planContext,
+      existingPlan: plan,
+      excludedMealIds: excludedShownMealIds(),
+      excludedBatchIds: [...shownBatchIds.current],
+    });
+    const next = suggestionCardsFor(proposed);
+    rememberSuggestions(next);
+    setSuggestions(next);
     // These values are persisted as immutable household updates.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan, meals, batchList, inventory, mealHistory, otherWeekPlan]);
@@ -1243,20 +1284,24 @@ function PlanTab({ planWeekOf, previousWeekPlan, meals, selectedMealIds, plan, o
       ...Object.values(otherWeekPlan ?? {}).filter((value) => String(value ?? "").startsWith("batch:")).map((value) => String(value).slice(6)),
       ...otherSuggestions.map(([, suggestion]) => suggestion?.batchId).filter(Boolean),
       suggestions[day]?.batchId,
+      ...shownBatchIds.current,
     ]);
     const batchPick = batchList
       .filter((batch) => batch.portions > 0 && !usedBatchIds.has(batch.id))
       .sort((left, right) => right.portions - left.portions)[0];
     if (batchPick) {
+      shownBatchIds.current.add(batchPick.id);
       setSuggestions((prev) => ({ ...prev, [day]: { type: "batch", batchId: batchPick.id, label: batchPick.name } }));
       return;
     }
     const excludedMealIds = [
+      ...excludedShownMealIds(),
       ...otherSuggestions.map(([, suggestion]) => suggestion?.mealId).filter(Boolean),
       suggestions[day]?.mealId,
     ];
     const [pick] = rankedMealSuggestions({ ...planContext, existingPlan: plan, excludedMealIds });
     if (pick) {
+      shownMealKeys.current.add(mealSuggestionKey(pick));
       setSuggestions((prev) => ({ ...prev, [day]: { type: "meal", mealId: pick.id, label: pick.name } }));
     }
   };

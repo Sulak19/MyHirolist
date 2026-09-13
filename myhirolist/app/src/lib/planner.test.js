@@ -8,6 +8,7 @@ import {
   committedIngredients,
   availableStock,
   daysSinceCooked,
+  mealSuggestionKey,
   planWeek,
   rankedMealSuggestions,
   shoppingNeeds,
@@ -114,6 +115,36 @@ test("suggestions prefer a protein that is currently in the kitchen", () => {
   assert.equal(ranked[0].id, "hamburg");
 });
 
+test("suggestions prefer meals whose meat and vegetables are all on hand", () => {
+  const ranked = rankedMealSuggestions({
+    meals: [MEALS[3], MEALS[2]],
+    inventory: [
+      { name: "beef mince", lowStock: false },
+      { name: "onions", lowStock: false },
+    ],
+    mealHistory: [],
+    otherWeekPlan: {},
+    existingPlan: {},
+    nowMs: NOW,
+  });
+  assert.equal(ranked[0].id, "hamburg", "bibimbap would still need spinach and carrot");
+});
+
+test("covered fresh ingredients outrank variety that needs a meat and veg shop", () => {
+  const ranked = rankedMealSuggestions({
+    meals: [MEALS[0], MEALS[2]],
+    inventory: [
+      { name: "chicken thigh", lowStock: false },
+      { name: "ginger", lowStock: false },
+    ],
+    mealHistory: [{ date: daysAgo(7), mealId: "karaage" }],
+    otherWeekPlan: {},
+    existingPlan: {},
+    nowMs: NOW,
+  });
+  assert.equal(ranked[0].id, "karaage");
+});
+
 test("suggestions avoid meals planned during the past month", () => {
   const ranked = rankedMealSuggestions({
     meals: [MEALS[0], MEALS[1]],
@@ -124,6 +155,41 @@ test("suggestions avoid meals planned during the past month", () => {
     nowMs: NOW,
   });
   assert.equal(ranked[0].id, "adobo");
+});
+
+test("duplicate saved records with the same meal name are one suggestion", () => {
+  const duplicateKaraage = { ...MEALS[0], id: "karaage-copy", name: "  KARAAGE  " };
+  const allMeals = [MEALS[0], duplicateKaraage, MEALS[2]];
+  const plan = planWeek({
+    meals: allMeals,
+    batches: [],
+    inventory: [],
+    mealHistory: [],
+    otherWeekPlan: {},
+    existingPlan: {},
+    nowMs: NOW,
+  });
+  const names = Object.values(plan)
+    .filter(Boolean)
+    .map((id) => allMeals.find((meal) => meal.id === id)?.name.trim().toLowerCase());
+  assert.equal(names.filter((name) => name === "karaage").length, 1);
+  assert.equal(mealSuggestionKey(MEALS[0]), mealSuggestionKey(duplicateKaraage));
+});
+
+test("already shown meals and their same-name copies stay out of later suggestions", () => {
+  const duplicateKaraage = { ...MEALS[0], id: "karaage-copy" };
+  const plan = planWeek({
+    meals: [MEALS[0], duplicateKaraage, MEALS[2]],
+    batches: [],
+    inventory: [],
+    mealHistory: [],
+    otherWeekPlan: {},
+    existingPlan: {},
+    excludedMealIds: [MEALS[0].id],
+    nowMs: NOW,
+  });
+  assert.ok(!Object.values(plan).includes(MEALS[0].id));
+  assert.ok(!Object.values(plan).includes(duplicateKaraage.id));
 });
 
 test("nothing repeats across the fortnight", () => {

@@ -17,6 +17,36 @@ const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 const norm = (value) => String(value ?? "").trim().toLowerCase();
 const asArray = (value) => (Array.isArray(value) ? value : []);
 
+// Saved data can contain two records for the same named meal. Suggestions
+// treat those as one choice even when their IDs differ.
+export function mealSuggestionKey(meal) {
+  const name = norm(meal?.name);
+  return name ? `name:${name}` : `id:${meal?.id ?? ""}`;
+}
+
+function markMealUsed(used, mealId, meals) {
+  if (!mealId) return;
+  used.add(mealId);
+  const meal = meals.find((candidate) => candidate.id === mealId);
+  if (meal) used.add(mealSuggestionKey(meal));
+}
+
+function recencyForMeals(meals, mealHistory, nowMs) {
+  const sinceCooked = daysSinceCooked(mealHistory, nowMs);
+  const byName = new Map();
+  for (const meal of meals) {
+    const days = sinceCooked.get(meal.id);
+    if (days === undefined) continue;
+    const key = mealSuggestionKey(meal);
+    byName.set(key, Math.min(days, byName.get(key) ?? Infinity));
+  }
+  for (const meal of meals) {
+    const days = byName.get(mealSuggestionKey(meal));
+    if (days !== undefined) sinceCooked.set(meal.id, days);
+  }
+  return sinceCooked;
+}
+
 // --- ingredient categories --------------------------------------------
 
 const MEAT = ["chicken", "beef", "pork", "lamb", "turkey", "duck", "goat", "veal", "venison", "rabbit", "steak", "mince", "fillet", "tenderloin", "brisket", "cutlet", "schnitzel", "fish", "shrimp", "prawn", "sausage", "kabana", "bacon", "chorizo", "tofu", "spec"];
@@ -152,7 +182,7 @@ const RECENT_DAYS = 30;
 export function scoreMeal(meal, context) {
   const { sinceCooked, alreadyThisFortnight, proteinCounts, available } = context;
   if (!meal) return null;
-  if (alreadyThisFortnight.has(meal.id)) return null; // never twice in a fortnight
+  if (alreadyThisFortnight.has(meal.id) || alreadyThisFortnight.has(mealSuggestionKey(meal))) return null;
 
   let score = 100;
 
@@ -164,12 +194,22 @@ export function scoreMeal(meal, context) {
     score += 15; // never cooked, or long enough ago to have fallen off history
   }
 
-  // Prefer meals whose protein is already in the kitchen, and spread proteins
-  // across the week so it is not chicken five nights running.
-  const proteins = asArray(meal.ingredients).filter(isProtein);
+  // Fresh ingredients drive the shopping cost of a meal. Strongly prefer
+  // meals whose meat and produce are already available, penalise missing
+  // fresh ingredients, and keep incomplete meal records behind meals the
+  // planner can actually verify against Kitchen stock.
+  const freshIngredients = asArray(meal.ingredients).filter((ingredient) => {
+    const category = categoryOf(ingredient);
+    return category === "Meat & fish" || category === "Produce";
+  });
   const tags = asArray(meal.tags);
 
-  if (proteins.some((p) => availableIngredientMatches(available, p))) score += 25;
+  if (freshIngredients.length === 0) score -= 30;
+  for (const ingredient of freshIngredients) {
+    const inStock = availableIngredientMatches(available, ingredient);
+    if (isProtein(ingredient)) score += inStock ? 45 : -100;
+    else score += inStock ? 15 : -25;
+  }
 
   for (const tag of tags) {
     const used = proteinCounts.get(tag) ?? 0;
@@ -194,11 +234,12 @@ export function rankedMealSuggestions({
   nowMs = Date.now(),
 }) {
   const mealList = asArray(meals);
-  const alreadyThisFortnight = new Set(asArray(excludedMealIds));
+  const alreadyThisFortnight = new Set();
+  for (const mealId of asArray(excludedMealIds)) markMealUsed(alreadyThisFortnight, mealId, mealList);
   for (const source of [otherWeekPlan, existingPlan]) {
     for (const weekday of WEEKDAYS) {
       const value = source?.[weekday];
-      if (value && !String(value).startsWith("batch:")) alreadyThisFortnight.add(value);
+      if (value && !String(value).startsWith("batch:")) markMealUsed(alreadyThisFortnight, value, mealList);
     }
   }
 
@@ -210,7 +251,7 @@ export function rankedMealSuggestions({
 
   const committed = committedIngredients([otherWeekPlan, existingPlan], mealList, []);
   const available = availableStock(inventory, committed);
-  const sinceCooked = daysSinceCooked(mealHistory, nowMs);
+  const sinceCooked = recencyForMeals(mealList, mealHistory, nowMs);
 
   return mealList
     .map((meal, index) => ({
@@ -238,24 +279,27 @@ export function planWeek({
   mealHistory,
   otherWeekPlan,
   existingPlan,
+  excludedMealIds = [],
+  excludedBatchIds = [],
   nowMs = Date.now(),
   fillAll = true,
 }) {
   const mealList = asArray(meals);
   const plan = { ...(existingPlan ?? {}) };
 
-  const sinceCooked = daysSinceCooked(mealHistory, nowMs);
+  const sinceCooked = recencyForMeals(mealList, mealHistory, nowMs);
 
   // Anything on the other week of the fortnight, or already chosen for this
   // one, is off the table - that is what makes the fortnight varied.
   const alreadyThisFortnight = new Set();
-  const usedBatchIds = new Set();
+  for (const mealId of asArray(excludedMealIds)) markMealUsed(alreadyThisFortnight, mealId, mealList);
+  const usedBatchIds = new Set(asArray(excludedBatchIds));
   for (const source of [otherWeekPlan, existingPlan]) {
     for (const weekday of WEEKDAYS) {
       const value = source?.[weekday];
       if (!value) continue;
       if (String(value).startsWith("batch:")) usedBatchIds.add(String(value).slice(6));
-      else alreadyThisFortnight.add(value);
+      else markMealUsed(alreadyThisFortnight, value, mealList);
     }
   }
 
@@ -302,7 +346,7 @@ export function planWeek({
 
     if (!best) continue; // ran out of meals that have not been used
     plan[weekday] = best.id;
-    alreadyThisFortnight.add(best.id);
+    markMealUsed(alreadyThisFortnight, best.id, mealList);
     countProteins(best.id);
   }
 
