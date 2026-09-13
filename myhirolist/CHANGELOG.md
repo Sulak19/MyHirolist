@@ -1,3 +1,9 @@
+## 1.0.47
+
+Merge pull request #34 from Sulak19/codex/shared-dog-food
+
+Track rotating shared dog food supplies
+
 ## 1.0.46
 
 Merge pull request #33 from Sulak19/codex/reliability-and-ingredients
