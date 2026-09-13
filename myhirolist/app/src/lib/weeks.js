@@ -64,6 +64,41 @@ export function planForDate(data, date = new Date()) {
   return {};
 }
 
+/**
+ * Moves batches whose planned day has arrived out of the active Batch list.
+ * Keeping the finished record (with zero portions) lets the plan, Today and
+ * calendar continue to resolve the batch name after it has been eaten.
+ */
+export function retirePlannedBatches(data, now = new Date()) {
+  if (!data || typeof data !== "object" || !Array.isArray(data.batchCooking)) return data;
+  const today = localDateKey(now);
+  const dueIds = new Set();
+  const weeks = [
+    { weekOf: data.previousWeekPlan?.weekOf, plan: data.previousWeekPlan?.plan },
+    { weekOf: data.planWeekOf, plan: data.weekPlan },
+    { weekOf: data.planWeekOf ? addDays(data.planWeekOf, 7) : null, plan: data.nextWeekPlan },
+  ];
+
+  for (const { weekOf, plan } of weeks) {
+    if (!weekOf || !plan || typeof plan !== "object") continue;
+    WEEKDAYS.forEach((weekday, index) => {
+      const value = plan[weekday];
+      if (!String(value ?? "").startsWith("batch:") || addDays(weekOf, index) > today) return;
+      dueIds.add(String(value).slice(6));
+    });
+  }
+
+  if (!data.batchCooking.some((batch) => dueIds.has(batch.id) && (batch.portions ?? 0) > 0)) return data;
+  return {
+    ...data,
+    batchCooking: data.batchCooking.map((batch) => (
+      dueIds.has(batch.id) && (batch.portions ?? 0) > 0
+        ? { ...batch, portions: 0, consumedOn: today }
+        : batch
+    )),
+  };
+}
+
 // The plan switches to the coming Monday at 7 pm Thursday, in the device's
 // local time. Friday through Sunday belong to that same newly promoted plan.
 function activePlanMonday(date) {

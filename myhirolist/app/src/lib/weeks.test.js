@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { rolloverWeeks, mondayOf, EMPTY_WEEK, planDates, planForDate } from "./weeks.js";
+import { retirePlannedBatches, rolloverWeeks, mondayOf, EMPTY_WEEK, planDates, planForDate } from "./weeks.js";
 
 test("dated plans and previous Friday remain correct after Thursday rollover", () => {
   const now = new Date(2026, 8, 10, 19);
@@ -146,4 +146,42 @@ test("existing history is kept, not replaced", () => {
   };
   const out = rolloverWeeks(data, WED_24_AUG);
   assert.deepEqual(out.mealHistory.map((h) => h.mealId), ["hamburg", "adobo"]);
+});
+
+test("a planned batch stays active until its meal-plan day", () => {
+  const data = {
+    planWeekOf: THIS_MONDAY,
+    weekPlan: { ...EMPTY_WEEK, Wednesday: "batch:b1" },
+    nextWeekPlan: EMPTY_WEEK,
+    batchCooking: [{ id: "b1", name: "Curry", portions: 4 }],
+  };
+  assert.equal(retirePlannedBatches(data, new Date(2026, 7, 25, 23, 59)), data);
+});
+
+test("a planned batch moves to finished when its day arrives", () => {
+  const data = {
+    planWeekOf: THIS_MONDAY,
+    weekPlan: { ...EMPTY_WEEK, Wednesday: "batch:b1" },
+    nextWeekPlan: EMPTY_WEEK,
+    batchCooking: [
+      { id: "b1", name: "Curry", portions: 4 },
+      { id: "b2", name: "Soup", portions: 2 },
+    ],
+  };
+  const out = retirePlannedBatches(data, WED_24_AUG);
+  assert.deepEqual(out.batchCooking, [
+    { id: "b1", name: "Curry", portions: 0, consumedOn: "2026-08-26" },
+    { id: "b2", name: "Soup", portions: 2 },
+  ]);
+  assert.equal(retirePlannedBatches(out, WED_24_AUG), out, "retiring twice is a no-op");
+});
+
+test("a missed batch is retired the next time the app opens", () => {
+  const data = {
+    planWeekOf: THIS_MONDAY,
+    weekPlan: { ...EMPTY_WEEK, Monday: "batch:b1" },
+    nextWeekPlan: EMPTY_WEEK,
+    batchCooking: [{ id: "b1", name: "Curry", portions: 4 }],
+  };
+  assert.equal(retirePlannedBatches(data, WED_24_AUG).batchCooking[0].portions, 0);
 });
