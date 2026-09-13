@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react';
-import { localFoodDate, migrationSuggestions, activateFoods, remainingG, remainingPackets, openingGramsForPackets, feedDogs, undoFeed, foodSupply, foodCoverage } from './lib/dogFood.js';
+import React, { useEffect, useRef, useState } from 'react';
+import { localFoodDate, migrationSuggestions, activateFoods, renameDogs, remainingG, remainingPackets, openingGramsForPackets, feedDogs, undoFeed, foodSupply, foodCoverage } from './lib/dogFood.js';
 
 const box = { border:'1px solid var(--line, #aaa)', borderRadius:10, padding:12, marginBottom:12, minWidth:0 };
 const input = { width:'100%', minWidth:0, boxSizing:'border-box', padding:8, margin:'4px 0 10px' };
@@ -13,6 +13,19 @@ function packetLabel(value) {
 export function Supply({data}) {
   const s=foodSupply(data);
   return <p>{s.days===null ? 'Review shared stock to calculate food remaining.' : `${s.incomplete ? 'At least' : 'Approximately'} ${s.days} days of food for ${data.dogs.length} dogs.${s.incomplete ? ' Estimate incomplete: set missing servings.' : ''}`}</p>;
+}
+export function DogNameEditor({data,onChange}) {
+  const [names,setNames]=useState(()=>Object.fromEntries((data.dogs||[]).map(d=>[d.id,d.name])));
+  const [error,setError]=useState('');
+  const [saved,setSaved]=useState(false);
+  useEffect(()=>setNames(Object.fromEntries((data.dogs||[]).map(d=>[d.id,d.name]))),[data.dogs]);
+  return <details style={box}><summary>Dog names</summary>
+    <form onSubmit={e=>{e.preventDefault();try{onChange(renameDogs(data,names));setError('');setSaved(true);}catch(err){setError(err.message);setSaved(false);}}} style={{marginTop:10}}>
+      {(data.dogs||[]).map((dog,index)=><Field key={dog.id} label={`Dog ${index+1} name`}><input required style={input} value={names[dog.id]??''} onChange={e=>{setNames({...names,[dog.id]:e.target.value});setSaved(false);}}/></Field>)}
+      {error&&<p role="alert">{error}</p>}{saved&&<p role="status">Names saved.</p>}
+      <button style={button} type="submit">Save names</button>
+    </form>
+  </details>;
 }
 function FeedingEditor({data,date,onChange,onClose}) {
   const existing=data.feedingHistory?.find(r=>r.date===date);

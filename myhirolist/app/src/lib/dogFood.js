@@ -8,6 +8,16 @@ export function migrateDogFood(source = {}) {
   if (source.foodVersion === 2) return source;
   return { ...source, foodMigrationPending: true };
 }
+export function renameDogs(source, namesById = {}) {
+  const dogs = (source.dogs || []).map(dog => ({
+    ...dog,
+    name: String(namesById[dog.id] ?? dog.name ?? "").trim(),
+  }));
+  if (dogs.some(dog => !dog.name)) throw Error("Enter a name for every dog.");
+  const unique = new Set(dogs.map(dog => dog.name.toLocaleLowerCase()));
+  if (unique.size !== dogs.length) throw Error("Each dog needs a different name.");
+  return { ...source, dogs };
+}
 export function migrationSuggestions(source) {
   const dogs = source.dogs || [];
   return dogs.filter(d => d.brand?.trim() || Number(d.packsOnHand)>0).map(d => ({

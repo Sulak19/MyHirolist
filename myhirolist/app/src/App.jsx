@@ -60,7 +60,7 @@ import { sameValue, undoChange } from "./lib/changes.js";
 import { applyCatalogue, findIngredient, saveIngredient, catalogueError } from "./lib/catalogue.js";
 import { planDates, addDays, planForDate } from "./lib/weeks.js";
 import { migrateDogFood, foodSupply } from "./lib/dogFood.js";
-import { DogFoodToday, SharedDogFoods } from "./DogFood.jsx";
+import { DogFoodToday, DogNameEditor, SharedDogFoods } from "./DogFood.jsx";
 
 /* ---------------------------------------------------------
    Home Base — a household dashboard
@@ -2664,6 +2664,7 @@ function DogTab({ view, dogFood, onChange, dogShoppingList, onDogShoppingChange 
       {view === "dogFood" && (
         <>
           <SectionTitle>Dog food</SectionTitle>
+          <DogNameEditor data={dogFood} onChange={onChange} />
           <SharedDogFoods data={dogFood} onChange={onChange} />
           <div style={{ marginTop: 24 }}>
         <SectionTitle>Other foods & treats</SectionTitle>
