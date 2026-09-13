@@ -9,6 +9,7 @@ import {
   availableStock,
   daysSinceCooked,
   planWeek,
+  rankedMealSuggestions,
   shoppingNeeds,
   reconcileShopping,
   addSelectedMealsToShopping,
@@ -99,6 +100,30 @@ test("a meal cooked last week loses to one not cooked in months", () => {
     nowMs: NOW,
   });
   assert.equal(plan.Monday, "adobo");
+});
+
+test("suggestions prefer a protein that is currently in the kitchen", () => {
+  const ranked = rankedMealSuggestions({
+    meals: [MEALS[0], MEALS[2]],
+    inventory: [{ name: "beef mince", lowStock: false }],
+    mealHistory: [],
+    otherWeekPlan: {},
+    existingPlan: {},
+    nowMs: NOW,
+  });
+  assert.equal(ranked[0].id, "hamburg");
+});
+
+test("suggestions avoid meals planned during the past month", () => {
+  const ranked = rankedMealSuggestions({
+    meals: [MEALS[0], MEALS[1]],
+    inventory: [{ name: "chicken thigh", lowStock: false }],
+    mealHistory: [{ date: daysAgo(30), mealId: "karaage" }, { date: daysAgo(31), mealId: "adobo" }],
+    otherWeekPlan: {},
+    existingPlan: {},
+    nowMs: NOW,
+  });
+  assert.equal(ranked[0].id, "adobo");
 });
 
 test("nothing repeats across the fortnight", () => {

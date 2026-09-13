@@ -144,8 +144,7 @@ export function daysSinceCooked(mealHistory, nowMs) {
   return seen;
 }
 
-const RECENT_DAYS = 14; // inside a fortnight, treat as just eaten
-const FAMILIAR_DAYS = 35;
+const RECENT_DAYS = 30;
 
 /**
  * Scores a meal for a slot. Higher is better; null means "do not use".
@@ -160,8 +159,7 @@ export function scoreMeal(meal, context) {
   const days = sinceCooked.get(meal.id);
   if (days !== undefined) {
     if (days <= RECENT_DAYS) score -= 60;
-    else if (days <= FAMILIAR_DAYS) score -= 20;
-    else score += 10; // a while back - nice to see it again
+    else score += 10; // outside the last month - nice to see it again
   } else {
     score += 15; // never cooked, or long enough ago to have fallen off history
   }
@@ -179,6 +177,50 @@ export function scoreMeal(meal, context) {
   }
 
   return score;
+}
+
+/**
+ * Ranks saved meals for one suggestion without changing the plan.
+ * This is also used by the UI's Shuffle action so it follows the same rules
+ * as whole-week suggestions instead of falling back to a random meal.
+ */
+export function rankedMealSuggestions({
+  meals,
+  inventory,
+  mealHistory,
+  otherWeekPlan,
+  existingPlan,
+  excludedMealIds = [],
+  nowMs = Date.now(),
+}) {
+  const mealList = asArray(meals);
+  const alreadyThisFortnight = new Set(asArray(excludedMealIds));
+  for (const source of [otherWeekPlan, existingPlan]) {
+    for (const weekday of WEEKDAYS) {
+      const value = source?.[weekday];
+      if (value && !String(value).startsWith("batch:")) alreadyThisFortnight.add(value);
+    }
+  }
+
+  const proteinCounts = new Map();
+  for (const mealId of alreadyThisFortnight) {
+    const meal = mealList.find((candidate) => candidate.id === mealId);
+    for (const tag of asArray(meal?.tags)) proteinCounts.set(tag, (proteinCounts.get(tag) ?? 0) + 1);
+  }
+
+  const committed = committedIngredients([otherWeekPlan, existingPlan], mealList, []);
+  const available = availableStock(inventory, committed);
+  const sinceCooked = daysSinceCooked(mealHistory, nowMs);
+
+  return mealList
+    .map((meal, index) => ({
+      meal,
+      index,
+      score: scoreMeal(meal, { sinceCooked, alreadyThisFortnight, proteinCounts, available }),
+    }))
+    .filter(({ score }) => score !== null)
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .map(({ meal }) => meal);
 }
 
 /**
