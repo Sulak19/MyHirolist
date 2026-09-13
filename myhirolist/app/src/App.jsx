@@ -24,7 +24,7 @@ import {
 import { scanImageWithClaude, listSnapshots, restoreSnapshot } from "./lib/api.js";
 import { useScanAvailable } from "./lib/useCapabilities.js";
 import { mergeWithDefaults } from "./lib/merge.js";
-import { rolloverWeeks, EMPTY_WEEK } from "./lib/weeks.js";
+import { retirePlannedBatches, rolloverWeeks, EMPTY_WEEK } from "./lib/weeks.js";
 import {
   planWeek,
   rankedMealSuggestions,
@@ -245,7 +245,7 @@ const DEFAULT_DATA = {
 };
 
 function normalizeHousehold(value) {
-  const merged = rolloverWeeks(mergeWithDefaults(DEFAULT_DATA, value));
+  const merged = retirePlannedBatches(rolloverWeeks(mergeWithDefaults(DEFAULT_DATA, value)));
   return applyCatalogue({ ...merged, dogFood: migrateDogFood(merged.dogFood), shopping: dedupeShoppingItems(merged.shopping), inventory: withInventoryStaples(merged.inventory) });
 }
 
@@ -399,7 +399,7 @@ export default function HomeBase() {
   usePlanPrep(data, setDataRaw, ready);
   useEffect(() => {
     if (!ready) return;
-    const advance = () => setDataRaw((current) => rolloverWeeks(current));
+    const advance = () => setDataRaw((current) => retirePlannedBatches(rolloverWeeks(current)));
     const timer = setInterval(advance, 30000);
     document.addEventListener("visibilitychange", advance);
     return () => { clearInterval(timer); document.removeEventListener("visibilitychange", advance); };
@@ -529,7 +529,6 @@ export default function HomeBase() {
             prepList={data.weekendPrep}
             onPrepChange={(v) => update("weekendPrep", v)}
             batchList={data.batchCooking}
-            onBatchChange={(v) => update("batchCooking", v)}
             inventory={data.inventory}
           />
         )}
@@ -1109,7 +1108,7 @@ function TapSelect({ value, valueLabel, options, searchOptions = options, onChan
   );
 }
 
-function PlanTab({ planWeekOf, previousWeekPlan, meals, selectedMealIds, plan, onPlanChange, planAuto, planWeek: activeWeek, onPlanWeekChange, otherWeekPlan, thisWeekPlan, nextWeekPlan, mealHistory, shoppingList, onShoppingChange, dismissedShopping, onDismissedShoppingChange, prepList, onPrepChange, batchList, onBatchChange, inventory }) {
+function PlanTab({ planWeekOf, previousWeekPlan, meals, selectedMealIds, plan, onPlanChange, planAuto, planWeek: activeWeek, onPlanWeekChange, otherWeekPlan, thisWeekPlan, nextWeekPlan, mealHistory, shoppingList, onShoppingChange, dismissedShopping, onDismissedShoppingChange, prepList, onPrepChange, batchList, inventory }) {
   const dates = planDates(planWeekOf, activeWeek === "next");
   const displayDate = (key) => new Date(`${key}T12:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
   const planContext = { meals, batches: batchList, inventory, mealHistory, otherWeekPlan };
@@ -1232,7 +1231,6 @@ function PlanTab({ planWeekOf, previousWeekPlan, meals, selectedMealIds, plan, o
     if (!s) return;
     if (s.type === "batch") {
       onPlanChange({ ...plan, [day]: `batch:${s.batchId}` }, { ...(planAuto ?? {}), [day]: false });
-      onBatchChange(batchList.map((b) => (b.id === s.batchId ? { ...b, portions: Math.max(0, b.portions - 1) } : b)));
     } else {
       onPlanChange({ ...plan, [day]: s.mealId }, { ...(planAuto ?? {}), [day]: false });
     }
@@ -1240,13 +1238,15 @@ function PlanTab({ planWeekOf, previousWeekPlan, meals, selectedMealIds, plan, o
 
   const shuffleSuggestion = (day) => {
     const otherSuggestions = Object.entries(suggestions).filter(([candidateDay]) => candidateDay !== day);
-    const usedBatchCounts = new Map();
-    for (const [, suggestion] of otherSuggestions) {
-      if (suggestion?.type === "batch") usedBatchCounts.set(suggestion.batchId, (usedBatchCounts.get(suggestion.batchId) ?? 0) + 1);
-    }
+    const usedBatchIds = new Set([
+      ...Object.values(plan ?? {}).filter((value) => String(value ?? "").startsWith("batch:")).map((value) => String(value).slice(6)),
+      ...Object.values(otherWeekPlan ?? {}).filter((value) => String(value ?? "").startsWith("batch:")).map((value) => String(value).slice(6)),
+      ...otherSuggestions.map(([, suggestion]) => suggestion?.batchId).filter(Boolean),
+      suggestions[day]?.batchId,
+    ]);
     const batchPick = batchList
-      .filter((batch) => batch.id !== suggestions[day]?.batchId && batch.portions > (usedBatchCounts.get(batch.id) ?? 0))
-      .sort((left, right) => (right.portions - (usedBatchCounts.get(right.id) ?? 0)) - (left.portions - (usedBatchCounts.get(left.id) ?? 0)))[0];
+      .filter((batch) => batch.portions > 0 && !usedBatchIds.has(batch.id))
+      .sort((left, right) => right.portions - left.portions)[0];
     if (batchPick) {
       setSuggestions((prev) => ({ ...prev, [day]: { type: "batch", batchId: batchPick.id, label: batchPick.name } }));
       return;

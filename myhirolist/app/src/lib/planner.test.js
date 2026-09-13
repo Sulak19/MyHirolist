@@ -165,7 +165,7 @@ test("proteins are spread rather than stacked", () => {
   assert.ok(chicken <= 2, `expected chicken spread, got ${chicken}`);
 });
 
-test("batch portions are spent before fresh meals are chosen", () => {
+test("each premade batch is suggested once even when it contains several portions", () => {
   const plan = planWeek({
     meals: MEALS,
     batches: [{ id: "b1", name: "Bolognese", portions: 2 }],
@@ -177,8 +177,20 @@ test("batch portions are spent before fresh meals are chosen", () => {
   });
 
   assert.equal(plan.Monday, "batch:b1");
-  assert.equal(plan.Tuesday, "batch:b1");
-  assert.ok(!String(plan.Wednesday).startsWith("batch:"), "only two portions existed");
+  assert.ok(!Object.values(plan).slice(1).includes("batch:b1"));
+});
+
+test("a batch already used on the other week is not suggested again", () => {
+  const plan = planWeek({
+    meals: MEALS,
+    batches: [{ id: "b1", name: "Bolognese", portions: 6 }],
+    inventory: [],
+    mealHistory: [],
+    otherWeekPlan: { Thursday: "batch:b1" },
+    existingPlan: {},
+    nowMs: NOW,
+  });
+  assert.ok(!Object.values(plan).includes("batch:b1"));
 });
 
 test("days already chosen are never overwritten", () => {

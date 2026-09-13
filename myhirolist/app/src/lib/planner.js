@@ -249,10 +249,13 @@ export function planWeek({
   // Anything on the other week of the fortnight, or already chosen for this
   // one, is off the table - that is what makes the fortnight varied.
   const alreadyThisFortnight = new Set();
+  const usedBatchIds = new Set();
   for (const source of [otherWeekPlan, existingPlan]) {
     for (const weekday of WEEKDAYS) {
       const value = source?.[weekday];
-      if (value && !String(value).startsWith("batch:")) alreadyThisFortnight.add(value);
+      if (!value) continue;
+      if (String(value).startsWith("batch:")) usedBatchIds.add(String(value).slice(6));
+      else alreadyThisFortnight.add(value);
     }
   }
 
@@ -266,9 +269,11 @@ export function planWeek({
     if (value && !String(value).startsWith("batch:")) countProteins(value);
   }
 
-  // Batch portions available to spend, most portions first.
+  // A batch represents one premade dinner for the household. Its portion
+  // count is useful stock information, but it must not fill several days of
+  // the plan or appear again on the other week of the fortnight.
   const spendableBatches = asArray(batches)
-    .filter((b) => (b.portions ?? 0) > 0)
+    .filter((b) => (b.portions ?? 0) > 0 && !usedBatchIds.has(b.id))
     .map((b) => ({ ...b }))
     .sort((a, b) => b.portions - a.portions);
 
@@ -279,10 +284,10 @@ export function planWeek({
     if (plan[weekday]) continue; // already chosen; never overwrite
     if (!fillAll) continue;
 
-    const batch = spendableBatches.find((b) => b.portions > 0);
+    const batch = spendableBatches.shift();
     if (batch) {
-      batch.portions -= 1;
       plan[weekday] = `batch:${batch.id}`;
+      usedBatchIds.add(batch.id);
       continue;
     }
 
