@@ -57,6 +57,8 @@ import { useHousehold } from "./lib/useHousehold.js";
 import { sameValue, undoChange } from "./lib/changes.js";
 import { applyCatalogue, findIngredient, saveIngredient, catalogueError } from "./lib/catalogue.js";
 import { planDates, addDays, planForDate } from "./lib/weeks.js";
+import { migrateDogFood, foodSupply } from "./lib/dogFood.js";
+import { DogFoodToday, SharedDogFoods } from "./DogFood.jsx";
 
 /* ---------------------------------------------------------
    Home Base — a household dashboard
@@ -243,7 +245,7 @@ const DEFAULT_DATA = {
 
 function normalizeHousehold(value) {
   const merged = rolloverWeeks(mergeWithDefaults(DEFAULT_DATA, value));
-  return applyCatalogue({ ...merged, shopping: dedupeShoppingItems(merged.shopping), inventory: withInventoryStaples(merged.inventory) });
+  return applyCatalogue({ ...merged, dogFood: migrateDogFood(merged.dogFood), shopping: dedupeShoppingItems(merged.shopping), inventory: withInventoryStaples(merged.inventory) });
 }
 
 /* Keeps the shopping list in step with the fortnight's meals.
@@ -495,6 +497,7 @@ export default function HomeBase() {
             onDogTreatmentGiven={(scheduleId) =>
               setData((current) => recordDogTreatment(current, scheduleId, treatmentDateKey(), uid))
             }
+            onDogFoodChange={(value) => update("dogFood", value)}
           />
         )}
         {tab === "plan" && (
@@ -872,13 +875,10 @@ function DayCards({ data, onCleaningChange, onOddJobsChange, onDogTreatmentGiven
   );
 }
 
-function HomeTab({ data, setTab, onCleaningChange, onOddJobsChange, onDogTreatmentGiven }) {
-  const dogStats = data.dogFood.dogs.map((d) => ({
-    ...d,
-    daysLeft: d.packsPerDay > 0 ? Math.floor(d.packsOnHand / d.packsPerDay) : null,
-  }));
+function HomeTab({ data, setTab, onCleaningChange, onOddJobsChange, onDogTreatmentGiven, onDogFoodChange }) {
   const dogExtrasLow = data.dogFood.extras.some((e) => e.lowStock);
-  const minDaysLeft = dogStats.reduce((min, d) => (d.daysLeft !== null && (min === null || d.daysLeft < min) ? d.daysLeft : min), null);
+  const supply = foodSupply(data.dogFood);
+  const minDaysLeft = supply.days;
   const expiringSoon = data.inventory.filter((i) => {
     if (!i.expiry) return false;
     const days = (new Date(i.expiry) - new Date()) / 86400000;
@@ -917,6 +917,7 @@ function HomeTab({ data, setTab, onCleaningChange, onOddJobsChange, onDogTreatme
         onDogTreatmentGiven={onDogTreatmentGiven}
         setTab={setTab}
       />
+      <DogFoodToday data={data.dogFood} onChange={onDogFoodChange} />
 
       <div style={styles.grid2}>
         <SummaryCard
@@ -935,7 +936,7 @@ function HomeTab({ data, setTab, onCleaningChange, onOddJobsChange, onDogTreatme
         <SummaryCard
           icon={Dog}
           label="Dog food"
-          value={dogExtrasLow ? "Treats running low" : `~${minDaysLeft ?? "?"} day${minDaysLeft === 1 ? "" : "s"} left`}
+          value={dogExtrasLow ? "Treats running low" : minDaysLeft === null ? "Review stock" : `${supply.incomplete ? "At least " : "~"}${minDaysLeft} days left${supply.incomplete ? " · incomplete" : ""}`}
           alert={dogExtrasLow}
           onClick={() => setTab("dogFood")}
         />
@@ -2658,10 +2659,10 @@ function DogTab({ view, dogFood, onChange, dogShoppingList, onDogShoppingChange 
       {view === "dogFood" && (
         <>
           <SectionTitle>Dog food</SectionTitle>
+          <SharedDogFoods data={dogFood} onChange={onChange} />
+          <details style={{ marginTop: 24 }}><summary>Dog profiles</summary><div style={{ marginTop: 12 }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         {dogFood.dogs.map((d) => {
-          const daysLeft = d.packsPerDay > 0 ? Math.floor(d.packsOnHand / d.packsPerDay) : null;
-          const gPerDay = d.packSizeG * d.packsPerDay;
           return (
             <div key={d.id} style={styles.card}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -2675,36 +2676,6 @@ function DogTab({ view, dogFood, onChange, dogShoppingList, onDogShoppingChange 
                 </button>
               </div>
 
-              <div style={{ display: "flex", gap: 12, marginTop: 10 }}>
-                <Field label="Food type" style={{ flex: 1 }}>
-                  <select style={{ ...styles.select, width: "100%" }} value={d.foodType} onChange={(e) => setDog(d.id, { foodType: e.target.value })}>
-                    <option>Raw</option>
-                    <option>Gently cooked</option>
-                    <option>Kibble</option>
-                  </select>
-                </Field>
-                <Field label="Brand" style={{ flex: 1 }}>
-                  <input style={styles.input} value={d.brand} onChange={(e) => setDog(d.id, { brand: e.target.value })} placeholder="brand" />
-                </Field>
-              </div>
-
-              <div style={{ display: "flex", gap: 12, marginTop: 12, flexWrap: "wrap" }}>
-                <Field label="Pack size (g)">
-                  <NumberStepper value={d.packSizeG} onChange={(v) => setDog(d.id, { packSizeG: Math.max(50, v) })} step={50} />
-                </Field>
-                <Field label="Packs/day">
-                  <NumberStepper value={d.packsPerDay} onChange={(v) => setDog(d.id, { packsPerDay: Math.max(0, v) })} step={0.5} />
-                </Field>
-                <Field label="Packs on hand">
-                  <NumberStepper value={d.packsOnHand} onChange={(v) => setDog(d.id, { packsOnHand: Math.max(0, v) })} />
-                </Field>
-              </div>
-
-              <div style={{ marginTop: 12, fontSize: 13, color: C.sage, fontFamily: "'IBM Plex Mono', monospace" }}>
-                {gPerDay}g/day
-                {daysLeft !== null && <> · ~{daysLeft} day{daysLeft === 1 ? "" : "s"} of supply left</>}
-              </div>
-
               <Field label="Notes" style={{ marginTop: 12 }}>
                 <input style={{ ...styles.input, width: "100%" }} value={d.notes} onChange={(e) => setDog(d.id, { notes: e.target.value })} placeholder="allergies, supplements, etc." />
               </Field>
@@ -2716,7 +2687,7 @@ function DogTab({ view, dogFood, onChange, dogShoppingList, onDogShoppingChange 
         + Add another dog
       </button>
 
-      <div style={{ marginTop: 24 }}>
+          </div></details><div style={{ marginTop: 24 }}>
         <SectionTitle>Other foods & treats</SectionTitle>
         <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 10 }}>
           Extras that aren't part of the daily meal — bones, sardines, patties, treats.

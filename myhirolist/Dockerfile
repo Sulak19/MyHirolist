@@ -25,6 +25,8 @@ RUN apk add --no-cache nodejs
 
 COPY --from=build /build/dist /app/www
 COPY server/ /app/server/
+COPY app/src/lib/dogFood.js /app/app/src/lib/dogFood.js
+COPY app/package.json /app/app/package.json
 COPY run.sh /run.sh
 RUN chmod a+x /run.sh
 
