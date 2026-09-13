@@ -1,3 +1,9 @@
+## 1.0.50
+
+Merge pull request #37 from Sulak19/codex/unique-batch-suggestions
+
+Keep batch and meal suggestions unique
+
 ## 1.0.49
 
 Make meal suggestions context aware
