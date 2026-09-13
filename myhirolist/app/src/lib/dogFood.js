@@ -30,6 +30,18 @@ export function remainingG(source, foodId) {
   return num(food.stockG) - (source.feedingHistory || []).reduce((sum, record) =>
     sum + record.entries.filter(e => e.foodId === foodId).reduce((s,e) => s + num(e.amountG), 0), 0);
 }
+export function remainingPackets(source, foodId) {
+  const food = source.foods?.find(f => f.id === foodId);
+  const size = num(food?.packSizeG);
+  return size > 0 ? remainingG(source, foodId) / size : null;
+}
+export function openingGramsForPackets(packetCount, packetSizeG, alreadyUsedG = 0) {
+  const packets = num(packetCount);
+  const size = num(packetSizeG);
+  const used = num(alreadyUsedG);
+  if (packets < 0 || !(size > 0) || used < 0) throw Error("Enter a valid packet count and packet size.");
+  return packets * size + used;
+}
 export function validateDogFood(source) {
   if (source?.foodVersion !== 2) return;
   const ids = new Set();
