@@ -1,3 +1,9 @@
+## 1.0.51
+
+Merge pull request #38 from Sulak19/codex/no-repeated-meal-suggestions
+
+Stop Suggest and Shuffle repeating meals
+
 ## 1.0.50
 
 Merge pull request #37 from Sulak19/codex/unique-batch-suggestions
