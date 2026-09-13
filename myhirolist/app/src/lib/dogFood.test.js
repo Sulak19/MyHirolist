@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { migrateDogFood, migrationSuggestions, activateFoods, remainingG, feedDogs, undoFeed, foodSupply, validateDogFood, localFoodDate } from './dogFood.js';
+import { migrateDogFood, migrationSuggestions, activateFoods, remainingG, remainingPackets, openingGramsForPackets, feedDogs, undoFeed, foodSupply, validateDogFood, localFoodDate } from './dogFood.js';
 import { mergeChanges, undoChange } from './changes.js';
 const date='2026-09-10';
 const base=()=>({foodVersion:2,dogs:[{id:'a',name:'A'},{id:'b',name:'B'}],foods:[{id:'f',name:'Food',stockG:1000,servings:{a:250,b:250}}],feedingHistory:[]});
@@ -53,3 +53,11 @@ test('individual foods and amounts retain historical names',()=>{
  assert.equal(result.feedingHistory[0].entries[1].dogName,'B');assert.equal(remainingG(result,'g'),600);
 });
 test('feeding uses local dates',()=>assert.equal(localFoodDate(new Date(2026,8,13,0,5)),'2026-09-13'));
+test('freezer stock is counted in packets while feeding retains partial packets',()=>{
+ const data=base();data.foods[0].packSizeG=500;
+ assert.equal(remainingPackets(data,'f'),2);
+ const fed=feedDogs(data,selection,date);
+ assert.equal(remainingPackets(fed,'f'),1);
+ assert.equal(openingGramsForPackets(3.5,500,250),2000);
+ assert.throws(()=>openingGramsForPackets(-1,500,0),/valid packet count/);
+});
