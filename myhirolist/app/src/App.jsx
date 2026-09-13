@@ -181,7 +181,7 @@ const DEFAULT_DATA = {
     dogs: [
       {
         id: uid(),
-        name: "Dog 1",
+        name: "Eg",
         foodType: "Raw",
         brand: "",
         packSizeG: 1000,
@@ -192,7 +192,7 @@ const DEFAULT_DATA = {
       },
       {
         id: uid(),
-        name: "Dog 2",
+        name: "Ernest",
         foodType: "Gently cooked",
         brand: "",
         packSizeG: 500,

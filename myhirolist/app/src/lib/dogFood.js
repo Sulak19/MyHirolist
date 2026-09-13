@@ -5,8 +5,11 @@ export function localFoodDate(now = new Date()) {
 }
 const num = v => Number.isFinite(Number(v)) ? Number(v) : NaN;
 export function migrateDogFood(source = {}) {
-  if (source.foodVersion === 2) return source;
-  return { ...source, foodMigrationPending: true };
+  const names = { "Dog 1": "Eg", "Dog 2": "Ernest" };
+  const dogs = (source.dogs || []).map(dog => names[dog.name] ? { ...dog, name: names[dog.name] } : dog);
+  const renamed = dogs.some((dog, index) => dog !== source.dogs[index]);
+  if (source.foodVersion === 2) return renamed ? { ...source, dogs } : source;
+  return { ...source, dogs, foodMigrationPending: true };
 }
 export function migrationSuggestions(source) {
   const dogs = source.dogs || [];

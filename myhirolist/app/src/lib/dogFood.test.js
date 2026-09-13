@@ -53,6 +53,10 @@ test('individual foods and amounts retain historical names',()=>{
  assert.equal(result.feedingHistory[0].entries[1].dogName,'B');assert.equal(remainingG(result,'g'),600);
 });
 test('feeding uses local dates',()=>assert.equal(localFoodDate(new Date(2026,8,13,0,5)),'2026-09-13'));
+test('placeholder dog names migrate to Eg and Ernest without changing custom names',()=>{
+ const result=migrateDogFood({foodVersion:2,dogs:[{id:'a',name:'Dog 1'},{id:'b',name:'Dog 2'},{id:'c',name:'Custom'}],foods:[],feedingHistory:[]});
+ assert.deepEqual(result.dogs.map(d=>d.name),['Eg','Ernest','Custom']);
+});
 test('freezer stock is counted in packets while feeding retains partial packets',()=>{
  const data=base();data.foods[0].packSizeG=500;
  assert.equal(remainingPackets(data,'f'),2);
