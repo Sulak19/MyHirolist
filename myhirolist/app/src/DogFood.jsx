@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { localFoodDate, migrationSuggestions, activateFoods, remainingG, remainingPackets, openingGramsForPackets, feedDogs, undoFeed, foodSupply, foodCoverage } from './lib/dogFood.js';
 
 const box = { border:'1px solid var(--line, #aaa)', borderRadius:10, padding:12, marginBottom:12, minWidth:0 };
@@ -20,11 +20,12 @@ function FeedingEditor({data,date,onChange,onClose}) {
   const [foodId,setFoodId]=useState('');
   const [choices,setChoices]=useState(Object.fromEntries((existing?.entries||[]).map(e=>[e.dogId,{foodId:e.foodId,amountG:e.amountG}])));
   const [error,setError]=useState('');
+  const submitting=useRef(false);
   const foods=data.foods.filter(f=>remainingG(data,f.id)>0 || existing?.entries.some(e=>e.foodId===f.id));
   const choose=(id)=> { setFoodId(id); const f=data.foods.find(f=>f.id===id); setChoices(Object.fromEntries(data.dogs.map(d=>[d.id,{foodId:id,amountG:f?.servings?.[d.id]||''}]))); };
-  return <form onSubmit={e=>{e.preventDefault();try {onChange(feedDogs(data,choices,date,!!existing));onClose?.();setError('');}catch(err){setError(err.message);}}}>
+  return <form onSubmit={e=>{e.preventDefault();if(submitting.current)return;try {const next=feedDogs(data,choices,date,!!existing);submitting.current=true;onChange(next);onClose?.();setError('');}catch(err){submitting.current=false;setError(err.message);}}}>
     <p>{existing ? 'Edit daily feeding' : 'Record daily feeding'} · {date}</p>
-    {!individual && <Field label="Food for both dogs"><select required style={input} value={foodId} onChange={e=>choose(e.target.value)}><option value="">Choose food</option>{foods.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select></Field>}
+    {!individual && <Field label="Choose food · Both dogs"><select required aria-label="Choose food for both dogs" style={input} value={foodId} onChange={e=>choose(e.target.value)}><option value="">Choose food</option>{foods.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select></Field>}
     <label><input type="checkbox" checked={individual} onChange={e=>setIndividual(e.target.checked)}/> Edit individually</label>
     {data.dogs.map(d=><div key={d.id} style={{marginTop:8}}><strong>{d.name}</strong>
       {individual && <select required aria-label={`${d.name} food`} style={input} value={choices[d.id]?.foodId||''} onChange={e=>{const f=data.foods.find(f=>f.id===e.target.value);setChoices({...choices,[d.id]:{foodId:f.id,amountG:f.servings?.[d.id]||''}});}}><option value="">Choose food</option>{foods.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select>}
