@@ -115,6 +115,36 @@ test("suggestions prefer a protein that is currently in the kitchen", () => {
   assert.equal(ranked[0].id, "hamburg");
 });
 
+test("suggestions prefer meals whose meat and vegetables are all on hand", () => {
+  const ranked = rankedMealSuggestions({
+    meals: [MEALS[3], MEALS[2]],
+    inventory: [
+      { name: "beef mince", lowStock: false },
+      { name: "onions", lowStock: false },
+    ],
+    mealHistory: [],
+    otherWeekPlan: {},
+    existingPlan: {},
+    nowMs: NOW,
+  });
+  assert.equal(ranked[0].id, "hamburg", "bibimbap would still need spinach and carrot");
+});
+
+test("covered fresh ingredients outrank variety that needs a meat and veg shop", () => {
+  const ranked = rankedMealSuggestions({
+    meals: [MEALS[0], MEALS[2]],
+    inventory: [
+      { name: "chicken thigh", lowStock: false },
+      { name: "ginger", lowStock: false },
+    ],
+    mealHistory: [{ date: daysAgo(7), mealId: "karaage" }],
+    otherWeekPlan: {},
+    existingPlan: {},
+    nowMs: NOW,
+  });
+  assert.equal(ranked[0].id, "karaage");
+});
+
 test("suggestions avoid meals planned during the past month", () => {
   const ranked = rankedMealSuggestions({
     meals: [MEALS[0], MEALS[1]],

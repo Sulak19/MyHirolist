@@ -194,12 +194,22 @@ export function scoreMeal(meal, context) {
     score += 15; // never cooked, or long enough ago to have fallen off history
   }
 
-  // Prefer meals whose protein is already in the kitchen, and spread proteins
-  // across the week so it is not chicken five nights running.
-  const proteins = asArray(meal.ingredients).filter(isProtein);
+  // Fresh ingredients drive the shopping cost of a meal. Strongly prefer
+  // meals whose meat and produce are already available, penalise missing
+  // fresh ingredients, and keep incomplete meal records behind meals the
+  // planner can actually verify against Kitchen stock.
+  const freshIngredients = asArray(meal.ingredients).filter((ingredient) => {
+    const category = categoryOf(ingredient);
+    return category === "Meat & fish" || category === "Produce";
+  });
   const tags = asArray(meal.tags);
 
-  if (proteins.some((p) => availableIngredientMatches(available, p))) score += 25;
+  if (freshIngredients.length === 0) score -= 30;
+  for (const ingredient of freshIngredients) {
+    const inStock = availableIngredientMatches(available, ingredient);
+    if (isProtein(ingredient)) score += inStock ? 45 : -100;
+    else score += inStock ? 15 : -25;
+  }
 
   for (const tag of tags) {
     const used = proteinCounts.get(tag) ?? 0;
