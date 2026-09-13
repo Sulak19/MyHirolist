@@ -1,3 +1,7 @@
+## 1.0.49
+
+Make meal suggestions context aware
+
 ## 1.0.48
 
 Merge pull request #35 from Sulak19/codex/dog-food-packets
