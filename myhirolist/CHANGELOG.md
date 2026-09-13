@@ -1,3 +1,9 @@
+## 1.0.52
+
+Merge pull request #39 from Sulak19/codex/edit-dog-names
+
+Make dog names editable
+
 ## 1.0.51
 
 Merge pull request #38 from Sulak19/codex/no-repeated-meal-suggestions
