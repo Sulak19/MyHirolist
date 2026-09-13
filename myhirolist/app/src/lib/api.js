@@ -5,6 +5,7 @@
 // absolute /api/data would escape the prefix and 404.
 
 import { mergeChanges, sameValue } from "./changes.js";
+import { validateDogFood } from "./dogFood.js";
 const BASE = "./api";
 
 // Preview builds (GitHub Pages) have no server behind them. They run on
@@ -48,6 +49,7 @@ export function saveHouseholdData(dataObj, base = serverData) {
 }
 
 async function saveMergedData(dataObj, base) {
+  validateDogFood(dataObj?.dogFood);
   if (PREVIEW) {
     localStorage.setItem(PREVIEW_KEY, JSON.stringify(dataObj));
     serverData = dataObj;
@@ -57,6 +59,7 @@ async function saveMergedData(dataObj, base) {
   for (let attempt = 0; attempt < 3; attempt++) {
     const latest = await asJson(await fetch(`${BASE}/data`), "Refresh before save");
     const merged = mergeChanges(base, dataObj, latest.data ?? null);
+    validateDogFood(merged?.dogFood);
     if (sameValue(merged, latest.data)) return latest;
     const res = await fetch(`${BASE}/data`, {
       method: "PUT",

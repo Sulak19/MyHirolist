@@ -6,6 +6,7 @@
 import fs from "node:fs/promises";
 import fsSync from "node:fs";
 import path from "node:path";
+import { validateDogFood } from "../app/src/lib/dogFood.js";
 
 const SNAPSHOT_INTERVAL_MS = 60 * 60 * 1000; // one an hour, at most
 const HOURLY_WINDOW_MS = 48 * 60 * 60 * 1000; // keep every one for two days
@@ -150,6 +151,7 @@ export function createStore(dir, options = {}) {
       throw error;
     }
 
+    validateDogFood(data?.dogFood);
     const next = {
       rev: current.rev + 1,
       updatedAt: new Date(now()).toISOString(),

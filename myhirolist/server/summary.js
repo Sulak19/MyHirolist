@@ -6,6 +6,7 @@
 // and this runs in the container. If you change one, change the other.
 
 const FREQ_DAYS = { Daily: 1, "Twice weekly": 3, Weekly: 7, Fortnightly: 14, Monthly: 30 };
+import { foodSupply } from "../app/src/lib/dogFood.js";
 const DAY_MS = 86400000;
 
 function localDayNumber(value) {
@@ -86,10 +87,12 @@ export function computeSummary(data, nowMs = Date.now()) {
     .map((dog) => (dog.packsPerDay > 0 ? Math.floor(dog.packsOnHand / dog.packsPerDay) : null))
     .filter((value) => value !== null);
 
-  const dogFoodDaysLeft = daysLeftPerDog.length ? Math.min(...daysLeftPerDog) : null;
+  const shared = data?.dogFood?.foodVersion === 2;
+  const supply = foodSupply(data?.dogFood);
+  const dogFoodDaysLeft = shared ? supply.days : daysLeftPerDog.length ? Math.min(...daysLeftPerDog) : null;
 
   const dogFoodLow =
-    dogs.some((dog) => dog.packsOnHand <= dog.reorderAtPacks) ||
+    (!shared && dogs.some((dog) => dog.packsOnHand <= dog.reorderAtPacks)) ||
     extras.some((extra) => extra.lowStock);
 
   const expiringSoon = inventory.filter((item) => {
@@ -109,6 +112,7 @@ export function computeSummary(data, nowMs = Date.now()) {
     cleaningDue: dueTasks.length,
     cleaningDueNames: dueTasks.map((task) => task.name),
     dogFoodDaysLeft,
+    dogFoodEstimateIncomplete: shared && supply.incomplete,
     dogFoodLow,
     expiringSoonCount: expiringSoon.length,
     expiringSoonNames: expiringSoon.map((item) => item.name),
@@ -178,6 +182,7 @@ export function sensorsFrom(summary) {
         unit_of_measurement: "days",
         icon: "mdi:dog-side",
         low_stock: summary.dogFoodLow,
+        estimate_incomplete: summary.dogFoodEstimateIncomplete || false,
       },
     },
     {

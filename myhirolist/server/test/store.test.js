@@ -5,6 +5,23 @@ import os from "node:os";
 import path from "node:path";
 
 import { createStore } from "../store.js";
+import { feedDogs, remainingG } from '../../app/src/lib/dogFood.js';
+import { mergeChanges } from '../../app/src/lib/changes.js';
+
+test('concurrent feeding retries reject overspending and keep same-day records consistent', async () => {
+  const store=createStore(tmpDir());
+  const dogFood={foodVersion:2,dogs:[{id:'a',name:'A'},{id:'b',name:'B'}],foods:[{id:'f',name:'Food',stockG:600,servings:{a:250,b:250}}],feedingHistory:[]};
+  const choice={a:{foodId:'f',amountG:250},b:{foodId:'f',amountG:250}};
+  await store.write({dogFood},0);
+  const first={dogFood:feedDogs(dogFood,choice,'2026-09-10')};
+  await store.write(first,1);
+  const other={dogFood:feedDogs(dogFood,choice,'2026-09-11')};
+  await assert.rejects(store.write(other,1),/RevMismatch/);
+  await assert.rejects(store.write(mergeChanges({dogFood},other,first),2),/Not enough/);
+  assert.equal(remainingG((await store.read()).data.dogFood,'f'),100);
+  await store.write(mergeChanges({dogFood},first,first),2);
+  assert.equal(remainingG((await store.read()).data.dogFood,'f'),100);
+});
 
 function tmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "myhirolist-"));

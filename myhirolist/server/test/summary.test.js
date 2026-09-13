@@ -5,6 +5,12 @@ import { computeSummary, isDue, sensorsFrom } from "../summary.js";
 
 const NOW = Date.parse("2026-08-23T12:00:00Z");
 const DAY = 86400000;
+
+test('shared supply counts both dogs and ignores old reorder fields',()=>{
+  const summary=computeSummary({dogFood:{foodVersion:2,dogs:[{id:'a',packsOnHand:0,reorderAtPacks:5},{id:'b'}],foods:[{id:'f',name:'Food',stockG:1000,servings:{a:250,b:250}}],feedingHistory:[],extras:[]}});
+  assert.equal(summary.dogFoodDaysLeft,2);assert.equal(summary.dogFoodLow,false);
+  assert.equal(sensorsFrom(summary).find(s=>s.objectId==='dog_food_days_left').state,2);
+});
 const localMs = (year, month, day, hour = 12) => new Date(year, month - 1, day, hour).getTime();
 const localIso = (year, month, day, hour = 12) => new Date(localMs(year, month, day, hour)).toISOString();
 
