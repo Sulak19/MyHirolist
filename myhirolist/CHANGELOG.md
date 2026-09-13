@@ -1,3 +1,9 @@
+## 1.0.48
+
+Merge pull request #35 from Sulak19/codex/dog-food-packets
+
+Count dog food freezer stock in packets
+
 ## 1.0.47
 
 Merge pull request #34 from Sulak19/codex/shared-dog-food
