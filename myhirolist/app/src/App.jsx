@@ -2567,17 +2567,6 @@ function CleaningTab({ view, list, onChange, oddJobs, onOddJobsChange }) {
 
 /* ---------------- DOG FOOD ---------------- */
 function DogTab({ view, dogFood, onChange, dogShoppingList, onDogShoppingChange }) {
-  const setDog = (id, patch) => onChange({ ...dogFood, dogs: dogFood.dogs.map((d) => (d.id === id ? { ...d, ...patch } : d)) });
-  const addDog = () =>
-    onChange({
-      ...dogFood,
-      dogs: [
-        ...dogFood.dogs,
-        { id: uid(), name: `Dog ${dogFood.dogs.length + 1}`, foodType: "Raw", brand: "", packSizeG: 1000, packsOnHand: 5, reorderAtPacks: 3, packsPerDay: 1, notes: "" },
-      ],
-    });
-  const removeDog = (id) => onChange({ ...dogFood, dogs: dogFood.dogs.filter((d) => d.id !== id) });
-
   const [extraName, setExtraName] = useState("");
   const addExtra = () => {
     if (!extraName.trim()) return;
@@ -2660,34 +2649,7 @@ function DogTab({ view, dogFood, onChange, dogShoppingList, onDogShoppingChange 
         <>
           <SectionTitle>Dog food</SectionTitle>
           <SharedDogFoods data={dogFood} onChange={onChange} />
-          <details style={{ marginTop: 24 }}><summary>Dog profiles</summary><div style={{ marginTop: 12 }}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        {dogFood.dogs.map((d) => {
-          return (
-            <div key={d.id} style={styles.card}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <input
-                  style={{ border: "none", background: "transparent", padding: 0, fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 17, color: C.ink, outline: "none" }}
-                  value={d.name}
-                  onChange={(e) => setDog(d.id, { name: e.target.value })}
-                />
-                <button style={styles.xBtn} onClick={() => removeDog(d.id)}>
-                  <X size={14} />
-                </button>
-              </div>
-
-              <Field label="Notes" style={{ marginTop: 12 }}>
-                <input style={{ ...styles.input, width: "100%" }} value={d.notes} onChange={(e) => setDog(d.id, { notes: e.target.value })} placeholder="allergies, supplements, etc." />
-              </Field>
-            </div>
-          );
-        })}
-      </div>
-      <button style={{ ...styles.linkBtn, marginTop: 4 }} onClick={addDog}>
-        + Add another dog
-      </button>
-
-          </div></details><div style={{ marginTop: 24 }}>
+          <div style={{ marginTop: 24 }}>
         <SectionTitle>Other foods & treats</SectionTitle>
         <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 10 }}>
           Extras that aren't part of the daily meal — bones, sardines, patties, treats.
