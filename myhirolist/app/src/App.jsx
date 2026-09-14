@@ -59,8 +59,8 @@ import { useHousehold } from "./lib/useHousehold.js";
 import { sameValue, undoChange } from "./lib/changes.js";
 import { applyCatalogue, findIngredient, saveIngredient, catalogueError } from "./lib/catalogue.js";
 import { planDates, addDays, planForDate } from "./lib/weeks.js";
-import { migrateDogFood, foodSupply } from "./lib/dogFood.js";
-import { DogFoodToday, DogNameEditor, SharedDogFoods } from "./DogFood.jsx";
+import { migrateDogFood, foodSupply, renameDogs } from "./lib/dogFood.js";
+import { DogFoodToday, SharedDogFoods } from "./DogFood.jsx";
 
 /* ---------------------------------------------------------
    Home Base — a household dashboard
@@ -616,8 +616,9 @@ export default function HomeBase() {
         )}
         {tab === "dogTreatments" && (
           <DogTreatmentsTab
-            dogs={data.dogFood.dogs}
+            dogFood={data.dogFood}
             treatments={data.dogTreatments}
+            onDogFoodChange={(value) => update("dogFood", value)}
             onScheduleChange={(dogId, category, patch) =>
               setData((current) => updateDogTreatmentSchedule(current, dogId, category, patch, uid))
             }
@@ -2664,7 +2665,6 @@ function DogTab({ view, dogFood, onChange, dogShoppingList, onDogShoppingChange 
       {view === "dogFood" && (
         <>
           <SectionTitle>Dog food</SectionTitle>
-          <DogNameEditor data={dogFood} onChange={onChange} />
           <SharedDogFoods data={dogFood} onChange={onChange} />
           <div style={{ marginTop: 24 }}>
         <SectionTitle>Other foods & treats</SectionTitle>
@@ -2848,13 +2848,38 @@ function DogTab({ view, dogFood, onChange, dogShoppingList, onDogShoppingChange 
 }
 
 
-function DogTreatmentsTab({ dogs, treatments, onScheduleChange, onRecord, onClearHistory, onDeleteHistoryEntry }) {
+function DogTreatmentsTab({ dogFood, treatments, onDogFoodChange, onScheduleChange, onRecord, onClearHistory, onDeleteHistoryEntry }) {
+  const dogs = dogFood?.dogs || [];
   const schedules = treatments?.schedules || [];
   const history = treatments?.history || [];
   const today = treatmentDateKey();
   const [openKey, setOpenKey] = useState(null);
   const [recordDates, setRecordDates] = useState({});
   const [openHistoryDogId, setOpenHistoryDogId] = useState(null);
+  const [editingNames, setEditingNames] = useState(false);
+  const [nameDrafts, setNameDrafts] = useState(() => Object.fromEntries(dogs.map((dog) => [dog.id, dog.name])));
+  const [nameError, setNameError] = useState("");
+
+  useEffect(() => {
+    if (!editingNames) setNameDrafts(Object.fromEntries(dogs.map((dog) => [dog.id, dog.name])));
+  }, [dogs, editingNames]);
+
+  const closeNameEditor = () => {
+    setNameDrafts(Object.fromEntries(dogs.map((dog) => [dog.id, dog.name])));
+    setNameError("");
+    setEditingNames(false);
+  };
+
+  const saveNames = (event) => {
+    event.preventDefault();
+    try {
+      onDogFoodChange(renameDogs(dogFood, nameDrafts));
+      setNameError("");
+      setEditingNames(false);
+    } catch (error) {
+      setNameError(error.message);
+    }
+  };
 
   const keyFor = (dogId, category) => `${category}::${dogId}`;
   const scheduleFor = (dogId, category) =>
@@ -2889,6 +2914,41 @@ function DogTreatmentsTab({ dogs, treatments, onScheduleChange, onRecord, onClea
       <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 14, lineHeight: 1.5 }}>
         Treatments are grouped by type so both dogs are easy to compare. Tap a dog to edit its product, interval, stock or treatment date.
       </div>
+
+      {!editingNames ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+          <span style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600 }}>
+            {dogs.map((dog) => dog.name).join(" · ")}
+          </span>
+          <button type="button" style={styles.linkBtnSmall} onClick={() => setEditingNames(true)}>
+            Edit names
+          </button>
+        </div>
+      ) : (
+        <form onSubmit={saveNames} style={{ background: C.inset, borderRadius: 10, padding: 12, marginBottom: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }}>
+            {dogs.map((dog, index) => (
+              <Field key={dog.id} label={`Dog ${index + 1} name`}>
+                <input
+                  required
+                  aria-label={`Dog ${index + 1} name`}
+                  style={{ ...styles.input, width: "100%" }}
+                  value={nameDrafts[dog.id] ?? ""}
+                  onChange={(event) => {
+                    setNameDrafts((current) => ({ ...current, [dog.id]: event.target.value }));
+                    setNameError("");
+                  }}
+                />
+              </Field>
+            ))}
+          </div>
+          {nameError && <div role="alert" style={{ color: C.rust, fontSize: 12.5, marginTop: 8 }}>{nameError}</div>}
+          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            <button type="submit" style={{ ...styles.addSpendBtn, marginTop: 0 }}>Save names</button>
+            <button type="button" style={styles.linkBtnSmall} onClick={closeNameEditor}>Cancel</button>
+          </div>
+        </form>
+      )}
 
       {DOG_TREATMENT_CATEGORIES.map((category) => (
         <div key={category} style={{ ...styles.card, padding: 0, overflow: "hidden" }}>
