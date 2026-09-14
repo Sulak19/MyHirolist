@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { localFoodDate, migrationSuggestions, activateFoods, renameDogs, remainingG, remainingPackets, openingGramsForPackets, feedDogs, undoFeed, foodSupply, foodCoverage } from './lib/dogFood.js';
+import React, { useRef, useState } from 'react';
+import { localFoodDate, migrationSuggestions, activateFoods, dogNameForEntry, remainingG, remainingPackets, openingGramsForPackets, feedDogs, undoFeed, foodSupply, foodCoverage } from './lib/dogFood.js';
 
 const box = { border:'1px solid var(--line, #aaa)', borderRadius:10, padding:12, marginBottom:12, minWidth:0 };
 const input = { width:'100%', minWidth:0, boxSizing:'border-box', padding:8, margin:'4px 0 10px' };
@@ -13,19 +13,6 @@ function packetLabel(value) {
 export function Supply({data}) {
   const s=foodSupply(data);
   return <p>{s.days===null ? 'Review shared stock to calculate food remaining.' : `${s.incomplete ? 'At least' : 'Approximately'} ${s.days} days of food for ${data.dogs.length} dogs.${s.incomplete ? ' Estimate incomplete: set missing servings.' : ''}`}</p>;
-}
-export function DogNameEditor({data,onChange}) {
-  const [names,setNames]=useState(()=>Object.fromEntries((data.dogs||[]).map(d=>[d.id,d.name])));
-  const [error,setError]=useState('');
-  const [saved,setSaved]=useState(false);
-  useEffect(()=>setNames(Object.fromEntries((data.dogs||[]).map(d=>[d.id,d.name]))),[data.dogs]);
-  return <details style={box}><summary>Dog names</summary>
-    <form onSubmit={e=>{e.preventDefault();try{onChange(renameDogs(data,names));setError('');setSaved(true);}catch(err){setError(err.message);setSaved(false);}}} style={{marginTop:10}}>
-      {(data.dogs||[]).map((dog,index)=><Field key={dog.id} label={`Dog ${index+1} name`}><input required style={input} value={names[dog.id]??''} onChange={e=>{setNames({...names,[dog.id]:e.target.value});setSaved(false);}}/></Field>)}
-      {error&&<p role="alert">{error}</p>}{saved&&<p role="status">Names saved.</p>}
-      <button style={button} type="submit">Save names</button>
-    </form>
-  </details>;
 }
 function FeedingEditor({data,date,onChange,onClose}) {
   const existing=data.feedingHistory?.find(r=>r.date===date);
@@ -54,7 +41,7 @@ export function DogFoodToday({data,onChange}) {
   const record=data.feedingHistory?.find(r=>r.date===date);
   if(data.foodVersion!==2) return null;
   return <section style={box}><strong>Dogs’ food today</strong>
-    {record && !editing ? <><p>Recorded today</p>{record.entries.map(e=><p key={e.dogId}>{e.dogName} · {e.foodName} · {e.amountG}g</p>)}<button style={button} onClick={()=>setEditing(true)}>Edit</button><button style={button} onClick={()=>onChange(undoFeed(data,date))}>Undo feeding</button></> : <FeedingEditor key={date+String(!!record)} data={data} date={date} onChange={onChange} onClose={editing?()=>setEditing(false):undefined}/>}
+    {record && !editing ? <><p>Recorded today</p>{record.entries.map(e=><p key={e.dogId}>{dogNameForEntry(data,e)} · {e.foodName} · {e.amountG}g</p>)}<button style={button} onClick={()=>setEditing(true)}>Edit</button><button style={button} onClick={()=>onChange(undoFeed(data,date))}>Undo feeding</button></> : <FeedingEditor key={date+String(!!record)} data={data} date={date} onChange={onChange} onClose={editing?()=>setEditing(false):undefined}/>}
   </section>;
 }
 function FoodForm({data,food,onSave,onCancel}) {
@@ -96,7 +83,7 @@ export function SharedDogFoods({data,onChange}) {
     {data.foods.map(f=><details key={f.id} style={box}><summary>{f.name} · {packetLabel(remainingPackets(data,f.id))} · {foodCoverage(data,f)===null?'Set servings':`~${foodCoverage(data,f).toFixed(1)} days`}</summary><button style={button} onClick={()=>setDraft(f)}>Edit food / update packet count</button></details>)}
     <details style={box}><summary>Feeding history</summary><Field label="Record or edit a date"><input type="date" max={localFoodDate()} style={input} value={date} onChange={e=>{setDate(e.target.value);setRecording(false);}}/></Field><button style={button} disabled={!date} onClick={()=>setRecording(true)}>Record / edit feeding</button>
       {recording&&<FeedingEditor key={date} data={data} date={date} onChange={onChange} onClose={()=>setRecording(false)}/>}
-      {[...(data.feedingHistory||[])].sort((a,b)=>b.date.localeCompare(a.date)).map(r=><div style={box} key={r.id}><strong>{r.date}</strong>{r.entries.map(e=><p key={e.dogId}>{e.dogName} · {e.foodName} · {e.amountG}g</p>)}<button style={button} onClick={()=>{setDate(r.date);setRecording(true);}}>Edit</button><button style={button} onClick={()=>onChange(undoFeed(data,r.date))}>Undo feeding</button></div>)}
+      {[...(data.feedingHistory||[])].sort((a,b)=>b.date.localeCompare(a.date)).map(r=><div style={box} key={r.id}><strong>{r.date}</strong>{r.entries.map(e=><p key={e.dogId}>{dogNameForEntry(data,e)} · {e.foodName} · {e.amountG}g</p>)}<button style={button} onClick={()=>{setDate(r.date);setRecording(true);}}>Edit</button><button style={button} onClick={()=>onChange(undoFeed(data,r.date))}>Undo feeding</button></div>)}
     </details>
   </section>;
 }

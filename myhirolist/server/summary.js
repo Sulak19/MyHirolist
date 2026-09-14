@@ -97,7 +97,9 @@ export function computeSummary(data, nowMs = Date.now()) {
 
   const expiringSoon = inventory.filter((item) => {
     if (!item.expiry) return false;
-    return (new Date(item.expiry).getTime() - nowMs) / DAY_MS <= 3;
+    const expiry = new Date(item.expiry);
+    if (Number.isNaN(expiry.getTime())) return false;
+    return localDayNumber(expiry) - localDayNumber(nowMs) <= 7;
   });
 
   const lowStock = inventory.filter((item) => item.lowStock);

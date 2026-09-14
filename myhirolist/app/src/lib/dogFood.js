@@ -18,6 +18,9 @@ export function renameDogs(source, namesById = {}) {
   if (unique.size !== dogs.length) throw Error("Each dog needs a different name.");
   return { ...source, dogs };
 }
+export function dogNameForEntry(source, entry) {
+  return (source?.dogs || []).find(dog => dog.id === entry?.dogId)?.name || entry?.dogName || "Dog";
+}
 export function migrationSuggestions(source) {
   const dogs = source.dogs || [];
   return dogs.filter(d => d.brand?.trim() || Number(d.packsOnHand)>0).map(d => ({

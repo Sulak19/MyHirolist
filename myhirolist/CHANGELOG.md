@@ -1,3 +1,15 @@
+## 1.0.54
+
+Merge pull request #41 from Sulak19/codex/edit-dog-names-in-treatments
+
+Edit dog names from Treatments
+
+## 1.0.53
+
+Merge pull request #40 from Sulak19/codex/use-up-expiring-items
+
+Show food expiring within seven days on Today
+
 ## 1.0.52
 
 Merge pull request #39 from Sulak19/codex/edit-dog-names
