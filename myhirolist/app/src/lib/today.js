@@ -13,6 +13,23 @@ export function oddJobsDueToday(jobs, now = new Date()) {
   return jobs.filter((job) => !job?.done && /^\d{4}-\d{2}-\d{2}$/.test(job?.dueDate) && job.dueDate <= today);
 }
 
+export function inventoryUseUpToday(items, now = new Date()) {
+  if (!Array.isArray(items) || !(now instanceof Date) || Number.isNaN(now.getTime())) return [];
+  const asKey = (date) =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  const limit = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7);
+  const limitKey = asKey(limit);
+
+  return items.filter((item) => {
+    const expiry = String(item?.expiry ?? "");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(expiry)) return false;
+    const [year, month, day] = expiry.split("-").map(Number);
+    const parsed = new Date(year, month - 1, day);
+    const valid = parsed.getFullYear() === year && parsed.getMonth() === month - 1 && parsed.getDate() === day;
+    return valid && expiry <= limitKey;
+  });
+}
+
 export function completeOddJob(jobs, id) {
   if (!Array.isArray(jobs) || !id) return jobs;
   let changed = false;

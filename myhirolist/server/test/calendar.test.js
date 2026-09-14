@@ -100,11 +100,21 @@ test("a plan pointing at a deleted meal produces no event", () => {
   assert.deepEqual(planEvents(data, NOW), []);
 });
 
-test("expiring food lands on its expiry date", () => {
-  const data = { inventory: [{ id: "i1", name: "Milk", expiry: "2026-08-28" }] };
-  const [event] = planEvents(data, NOW);
+test("food expiring within seven days is kept on Today as Use up", () => {
+  const data = {
+    inventory: [
+      { id: "overdue", name: "Milk", expiry: "2026-08-25" },
+      { id: "boundary", name: "Yoghurt", expiry: "2026-09-02" },
+      { id: "later", name: "Cheese", expiry: "2026-09-03" },
+    ],
+  };
+  const events = planEvents(data, NOW).filter((event) => event.key.startsWith("expiry:"));
 
-  assert.deepEqual(event, { key: "expiry:i1", summary: "Use up: Milk", date: "2026-08-28" });
+  assert.deepEqual(events, [
+    { key: "expiry:overdue", summary: "Use up: Milk", date: "2026-08-26" },
+    { key: "expiry:boundary", summary: "Use up: Yoghurt", date: "2026-08-26" },
+    { key: "expiry:later", summary: "Use up: Cheese", date: "2026-09-03" },
+  ]);
 });
 
 test("inventory without an expiry, or with a broken one, is skipped", () => {

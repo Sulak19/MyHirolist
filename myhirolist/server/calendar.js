@@ -91,6 +91,15 @@ function todayWhenOverdue(date, nowMs) {
   return date < today ? today : date;
 }
 
+// Once food is within the seven-day use-up window, keep its reminder on
+// Today until the item is removed or its expiry is changed. Items further
+// away retain their expiry-date event so the calendar can still look ahead.
+function useUpReminderDate(expiry, nowMs) {
+  if (!parseDateKey(expiry)) return null;
+  const today = toDateKey(nowMs);
+  return expiry <= addDays(today, 7) ? today : expiry;
+}
+
 function mealNameFor(data, value) {
   if (!value) return null;
 
@@ -194,9 +203,9 @@ export function planEvents(data, nowMs) {
   // Food about to go off.
   for (const item of asArray(data.inventory)) {
     if (!item?.expiry || !item.id) continue;
-    const parsed = Date.parse(item.expiry);
-    if (Number.isNaN(parsed)) continue;
-    events.push({ key: `expiry:${item.id}`, summary: `Use up: ${item.name}`, date: toDateKey(parsed) });
+    const date = useUpReminderDate(item.expiry, nowMs);
+    if (!date) continue;
+    events.push({ key: `expiry:${item.id}`, summary: `Use up: ${item.name}`, date });
   }
 
   return events;
