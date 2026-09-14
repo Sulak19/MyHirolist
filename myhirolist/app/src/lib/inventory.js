@@ -30,7 +30,11 @@ export function itemKey(value) {
     .join(" ");
 }
 
-const MEAT_SPECIES = ["chicken", "beef", "pork", "lamb", "turkey", "duck", "goat", "veal", "venison", "rabbit"];
+const MEAT_SPECIES = [
+  "chicken", "beef", "pork", "lamb", "turkey", "duck", "goat", "veal", "venison", "rabbit",
+  "fish", "salmon", "tuna", "cod", "barramundi", "snapper", "mackerel", "sardine", "trout",
+  "prawn", "shrimp",
+];
 const MEAT_SPECIES_PATTERN = MEAT_SPECIES.join("|");
 const MEAT_CUTS = [
   ["mince", ["mince", "minced", "ground"]],
@@ -55,7 +59,7 @@ const MEAT_CUTS = [
   ["chunks", ["chunk", "diced", "cube", "cubed"]],
   ["strips", ["strip"]],
   ["roast", ["roast"]],
-  ["sausage", ["sausage", "chorizo", "kabana", "bacon"]],
+  ["sausage", ["sausage", "chorizo", "kabana", "bacon", "speck", "spec"]],
 ];
 
 const hasWord = (text, word) => new RegExp(`(?:^|\\s)${word}(?:$|\\s)`).test(text);

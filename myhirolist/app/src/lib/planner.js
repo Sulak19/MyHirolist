@@ -49,7 +49,7 @@ function recencyForMeals(meals, mealHistory, nowMs) {
 
 // --- ingredient categories --------------------------------------------
 
-const MEAT = ["chicken", "beef", "pork", "lamb", "turkey", "duck", "goat", "veal", "venison", "rabbit", "steak", "mince", "fillet", "tenderloin", "brisket", "cutlet", "schnitzel", "fish", "shrimp", "prawn", "sausage", "kabana", "bacon", "chorizo", "tofu", "spec"];
+const MEAT = ["chicken", "beef", "pork", "lamb", "turkey", "duck", "goat", "veal", "venison", "rabbit", "steak", "mince", "fillet", "tenderloin", "brisket", "cutlet", "schnitzel", "fish", "salmon", "tuna", "cod", "barramundi", "snapper", "mackerel", "sardine", "trout", "shrimp", "prawn", "sausage", "kabana", "bacon", "chorizo", "speck", "spec", "tofu", "tempeh"];
 const PRODUCE = ["onion", "carrot", "cabbage", "spinach", "potato", "garlic", "ginger", "chive", "capsicum", "tomato", "cucumber", "zucchini", "daikon", "sprout", "leek", "wombok", "enoki", "basil", "coriander", "chilli", "lemon", "lime", "mushroom", "bean", "corn", "veg", "salad", "herb"];
 const DAIRY = ["milk", "cheese", "butter", "cream", "yoghurt", "yogurt", "egg"];
 const FROZEN = ["frozen", "ice"];
@@ -105,7 +105,14 @@ export function categoryOf(ingredient) {
 }
 
 export function isProtein(ingredient) {
-  return categoryOf(ingredient) === "Meat & fish";
+  const key = itemKey(ingredient);
+  if (!key || /\b(stock|broth|sauce|paste|powder|seasoning|oil)\b/.test(key)) return false;
+  if (ingredientRequirementKeys(ingredient).some((candidate) => candidate.startsWith("meat:"))) return true;
+  return /\b(egg|tofu|tempeh|protein|lentil|chickpea)\b/.test(key);
+}
+
+function proteinIngredients(meal) {
+  return asArray(meal?.ingredients).filter(isProtein);
 }
 
 // --- resolving plans to meals -----------------------------------------
@@ -184,6 +191,12 @@ export function scoreMeal(meal, context) {
   if (!meal) return null;
   if (alreadyThisFortnight.has(meal.id) || alreadyThisFortnight.has(mealSuggestionKey(meal))) return null;
 
+  // Automatic suggestions are only useful when their main protein is
+  // genuinely available. Meals with incomplete ingredient records are left
+  // for manual selection rather than guessed from a broad tag.
+  const proteins = proteinIngredients(meal);
+  if (proteins.length === 0 || !proteins.some((ingredient) => availableIngredientMatches(available, ingredient))) return null;
+
   let score = 100;
 
   const days = sinceCooked.get(meal.id);
@@ -200,7 +213,7 @@ export function scoreMeal(meal, context) {
   // planner can actually verify against Kitchen stock.
   const freshIngredients = asArray(meal.ingredients).filter((ingredient) => {
     const category = categoryOf(ingredient);
-    return category === "Meat & fish" || category === "Produce";
+    return isProtein(ingredient) || category === "Produce";
   });
   const tags = asArray(meal.tags);
 
@@ -231,6 +244,7 @@ export function rankedMealSuggestions({
   otherWeekPlan,
   existingPlan,
   excludedMealIds = [],
+  reservedMealIds = [],
   nowMs = Date.now(),
 }) {
   const mealList = asArray(meals);
@@ -249,7 +263,8 @@ export function rankedMealSuggestions({
     for (const tag of asArray(meal?.tags)) proteinCounts.set(tag, (proteinCounts.get(tag) ?? 0) + 1);
   }
 
-  const committed = committedIngredients([otherWeekPlan, existingPlan], mealList, []);
+  const reservedPlan = Object.fromEntries(asArray(reservedMealIds).slice(0, WEEKDAYS.length).map((mealId, index) => [WEEKDAYS[index], mealId]));
+  const committed = committedIngredients([otherWeekPlan, existingPlan, reservedPlan], mealList, []);
   const available = availableStock(inventory, committed);
   const sinceCooked = recencyForMeals(mealList, mealHistory, nowMs);
 
@@ -321,9 +336,6 @@ export function planWeek({
     .map((b) => ({ ...b }))
     .sort((a, b) => b.portions - a.portions);
 
-  const committed = committedIngredients([otherWeekPlan, plan], mealList, batches);
-  const available = availableStock(inventory, committed);
-
   for (const weekday of WEEKDAYS) {
     if (plan[weekday]) continue; // already chosen; never overwrite
     if (!fillAll) continue;
@@ -337,6 +349,10 @@ export function planWeek({
 
     let best = null;
     let bestScore = -Infinity;
+    // Recalculate after every proposed day so the same unquantified Kitchen
+    // protein is not promised to several dinners.
+    const committed = committedIngredients([otherWeekPlan, plan], mealList, batches);
+    const available = availableStock(inventory, committed);
     mealList.forEach((meal) => {
       const score = scoreMeal(meal, { sinceCooked, alreadyThisFortnight, proteinCounts, available });
       if (score === null || score <= bestScore) return;

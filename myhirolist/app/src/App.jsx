@@ -1299,7 +1299,8 @@ function PlanTab({ planWeekOf, previousWeekPlan, meals, selectedMealIds, plan, o
       ...otherSuggestions.map(([, suggestion]) => suggestion?.mealId).filter(Boolean),
       suggestions[day]?.mealId,
     ];
-    const [pick] = rankedMealSuggestions({ ...planContext, existingPlan: plan, excludedMealIds });
+    const reservedMealIds = otherSuggestions.map(([, suggestion]) => suggestion?.mealId).filter(Boolean);
+    const [pick] = rankedMealSuggestions({ ...planContext, existingPlan: plan, excludedMealIds, reservedMealIds });
     if (pick) {
       shownMealKeys.current.add(mealSuggestionKey(pick));
       setSuggestions((prev) => ({ ...prev, [day]: { type: "meal", mealId: pick.id, label: pick.name } }));
@@ -1342,7 +1343,7 @@ function PlanTab({ planWeekOf, previousWeekPlan, meals, selectedMealIds, plan, o
         {WEEKDAYS.map((day) => <p key={day}>{day}: {meals.find((m) => m.id === previousWeekPlan.plan?.[day])?.name || batchList.find((b) => `batch:${b.id}` === previousWeekPlan.plan?.[day])?.name || "Nothing planned"}</p>)}
       </details>}
       <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 12 }}>
-        Suggestions use batch portions first, then available proteins and meals not planned in the past month — or choose any saved meal for any day.
+        Suggestions use batch portions first, then meals with protein available in Kitchen and meals not planned in the past month — or choose any saved meal for any day.
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -1394,7 +1395,7 @@ function PlanTab({ planWeekOf, previousWeekPlan, meals, selectedMealIds, plan, o
                   </div>
                 </div>
               ) : (
-                <div style={{ fontSize: 13, color: C.inkFaint, fontStyle: "italic" }}>No suggestion available</div>
+                <div style={{ fontSize: 13, color: C.inkFaint, fontStyle: "italic" }}>No unused meal matches protein available in Kitchen</div>
               )}
 
               <div style={{ marginTop: 10 }}>
