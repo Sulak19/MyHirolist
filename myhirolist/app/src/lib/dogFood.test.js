@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { migrateDogFood, migrationSuggestions, activateFoods, renameDogs, remainingG, remainingPackets, openingGramsForPackets, feedDogs, undoFeed, foodSupply, validateDogFood, localFoodDate } from './dogFood.js';
+import { migrateDogFood, migrationSuggestions, activateFoods, renameDogs, dogNameForEntry, remainingG, remainingPackets, openingGramsForPackets, feedDogs, undoFeed, foodSupply, validateDogFood, localFoodDate } from './dogFood.js';
 import { mergeChanges, undoChange } from './changes.js';
 const date='2026-09-10';
 const base=()=>({foodVersion:2,dogs:[{id:'a',name:'A'},{id:'b',name:'B'}],foods:[{id:'f',name:'Food',stockG:1000,servings:{a:250,b:250}}],feedingHistory:[]});
@@ -18,6 +18,7 @@ test('dog names can change without changing IDs, food settings or history',()=>{
  assert.deepEqual(renamed.dogs.map(d=>({id:d.id,name:d.name})),[{id:'a',name:'Eg'},{id:'b',name:'Ernest'}]);
  assert.deepEqual(renamed.foods,fed.foods);
  assert.deepEqual(renamed.feedingHistory,fed.feedingHistory);
+ assert.equal(dogNameForEntry(renamed, fed.feedingHistory[0].entries[0]), 'Eg');
  assert.throws(()=>renameDogs(fed,{a:'Eg',b:' eg '}),/different name/);
  assert.throws(()=>renameDogs(fed,{a:'',b:'Ernest'}),/name for every dog/);
 });
