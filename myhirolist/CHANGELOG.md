@@ -1,3 +1,9 @@
+## 1.0.55
+
+Merge pull request #42 from Sulak19/codex/require-stocked-protein
+
+Require available protein for meal suggestions
+
 ## 1.0.54
 
 Merge pull request #41 from Sulak19/codex/edit-dog-names-in-treatments
