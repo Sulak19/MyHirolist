@@ -81,11 +81,11 @@ test("low stock is flagged from dogs or from extras", () => {
   assert.equal(fromExtra.dogFoodLow, true);
 });
 
-test("items expiring within three days are surfaced, later ones are not", () => {
+test("items expiring within seven days are surfaced, later ones are not", () => {
   const summary = computeSummary(
     {
       inventory: [
-        { name: "Milk", expiry: new Date(NOW + 2 * DAY).toISOString() },
+        { name: "Milk", expiry: new Date(NOW + 7 * DAY).toISOString() },
         { name: "Rice", expiry: null },
         { name: "Yoghurt", expiry: new Date(NOW + 10 * DAY).toISOString() },
       ],

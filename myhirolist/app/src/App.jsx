@@ -52,7 +52,7 @@ import {
 import { getToday } from "./lib/api.js";
 import { C, useTheme } from "./lib/theme.js";
 import { clearLowStockForPrep, dedupeInventoryItems, dedupeShoppingItems, itemKey, moveInventoryItem, staplesFirst, withInventoryStaples } from "./lib/inventory.js";
-import { completeOddJob, oddJobsDueToday, shouldShowMealPrepToday } from "./lib/today.js";
+import { completeOddJob, inventoryUseUpToday, oddJobsDueToday, shouldShowMealPrepToday } from "./lib/today.js";
 import { cleaningTaskStatus, sortCleaningTasks } from "./lib/cleaning.js";
 import { clearPrepItems, visiblePrepItems } from "./lib/prepCompletion.js";
 import { useHousehold } from "./lib/useHousehold.js";
@@ -729,8 +729,7 @@ function agendaFromData(data) {
         date: todayKey,
         dinner: meal ? { name: meal.name, refId: todayKey, allDay: true } : null,
         chores: data.cleaning.filter((c) => isDue(c)).map((c) => ({ name: c.name, refId: c.id, allDay: true })),
-        expiry: data.inventory
-          .filter((i) => i.expiry && (new Date(i.expiry) - now) / 86400000 <= 3)
+        expiry: inventoryUseUpToday(data.inventory, now)
           .map((i) => ({ name: i.name, refId: i.id, allDay: true })),
         other: oddJobsDueToday(data.oddJobs, now).map((job) => ({
           name: job.name,
