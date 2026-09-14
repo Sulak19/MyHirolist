@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   categoryOf,
+  isProtein,
   clearAutoDays,
   replan,
   committedIngredients,
@@ -50,6 +51,11 @@ test("ingredients land in sensible supermarket aisles", () => {
   assert.equal(categoryOf("soy sauce"), "Pantry");
   assert.equal(categoryOf("frozen peas"), "Frozen");
   assert.equal(categoryOf("serviettes"), "Other");
+  assert.equal(categoryOf("salmon"), "Meat & fish");
+  assert.equal(isProtein("frozen chicken thighs"), true);
+  assert.equal(isProtein("salmon"), true);
+  assert.equal(isProtein("eggs"), true);
+  assert.equal(isProtein("chicken stock"), false);
 });
 
 // --- committed stock ---------------------------------------------------
@@ -94,7 +100,7 @@ test("a meal cooked last week loses to one not cooked in months", () => {
   const plan = planWeek({
     meals: [MEALS[0], MEALS[1]],
     batches: [],
-    inventory: [],
+    inventory: [{ name: "chicken thigh", lowStock: false }],
     mealHistory: [{ date: daysAgo(3), mealId: "karaage" }, { date: daysAgo(90), mealId: "adobo" }],
     otherWeekPlan: {},
     existingPlan: {},
@@ -113,6 +119,45 @@ test("suggestions prefer a protein that is currently in the kitchen", () => {
     nowMs: NOW,
   });
   assert.equal(ranked[0].id, "hamburg");
+  assert.deepEqual(ranked.map((meal) => meal.id), ["hamburg"], "the chicken meal is not eligible without chicken");
+});
+
+test("automatic suggestions require a recognised protein that is not low", () => {
+  const meals = [
+    { id: "chicken", name: "Chicken", ingredients: ["chicken thigh", "carrot"] },
+    { id: "salmon", name: "Salmon", ingredients: ["salmon", "spinach"] },
+    { id: "incomplete", name: "Stir-fry", tags: ["Beef"], ingredients: [] },
+  ];
+  const ranked = rankedMealSuggestions({
+    meals,
+    inventory: [
+      { name: "Frozen salmon fillets", lowStock: false },
+      { name: "Chicken thighs", lowStock: true },
+    ],
+    mealHistory: [],
+    otherWeekPlan: {},
+    existingPlan: {},
+    nowMs: NOW,
+  });
+
+  assert.deepEqual(ranked.map((meal) => meal.id), ["salmon"]);
+});
+
+test("compatible meat cuts and alternative proteins qualify a meal", () => {
+  const ranked = rankedMealSuggestions({
+    meals: [
+      { id: "generic", name: "Pork dinner", ingredients: ["pork", "cabbage"] },
+      { id: "alternative", name: "Adobo", ingredients: ["chicken or pork belly", "potato"] },
+      { id: "wrong-cut", name: "Pork mince bowl", ingredients: ["pork mince", "rice"] },
+    ],
+    inventory: [{ name: "Pork belly slices", lowStock: false }],
+    mealHistory: [],
+    otherWeekPlan: {},
+    existingPlan: {},
+    nowMs: NOW,
+  });
+
+  assert.deepEqual(ranked.map((meal) => meal.id).sort(), ["alternative", "generic"]);
 });
 
 test("suggestions prefer meals whose meat and vegetables are all on hand", () => {
@@ -163,7 +208,7 @@ test("duplicate saved records with the same meal name are one suggestion", () =>
   const plan = planWeek({
     meals: allMeals,
     batches: [],
-    inventory: [],
+    inventory: [{ name: "chicken thigh", lowStock: false }, { name: "beef mince", lowStock: false }],
     mealHistory: [],
     otherWeekPlan: {},
     existingPlan: {},
@@ -196,7 +241,7 @@ test("nothing repeats across the fortnight", () => {
   const plan = planWeek({
     meals: MEALS,
     batches: [],
-    inventory: [],
+    inventory: [{ name: "beef mince", lowStock: false }],
     mealHistory: [],
     otherWeekPlan: { Monday: "karaage", Tuesday: "adobo" },
     existingPlan: {},
@@ -214,7 +259,7 @@ test("proteins are spread rather than stacked", () => {
   const plan = planWeek({
     meals: MEALS,
     batches: [],
-    inventory: [],
+    inventory: [{ name: "chicken thigh", lowStock: false }, { name: "beef mince", lowStock: false }],
     mealHistory: [],
     otherWeekPlan: {},
     existingPlan: {},
@@ -276,7 +321,7 @@ test("planning twice in a row gives the same answer", () => {
   const args = {
     meals: MEALS,
     batches: [],
-    inventory: [],
+    inventory: [{ name: "chicken thigh", lowStock: false }, { name: "beef mince", lowStock: false }],
     mealHistory: [{ date: daysAgo(10), mealId: "hamburg" }],
     otherWeekPlan: {},
     existingPlan: {},
@@ -289,7 +334,7 @@ test("running out of unused meals leaves days empty rather than repeating", () =
   const plan = planWeek({
     meals: [MEALS[0]],
     batches: [],
-    inventory: [],
+    inventory: [{ name: "chicken thigh", lowStock: false }],
     mealHistory: [],
     otherWeekPlan: {},
     existingPlan: {},
@@ -297,6 +342,42 @@ test("running out of unused meals leaves days empty rather than repeating", () =
   });
   const chosen = Object.values(plan).filter(Boolean);
   assert.equal(chosen.length, 1);
+});
+
+test("one unquantified protein item is reserved for only one suggested dinner", () => {
+  const plan = planWeek({
+    meals: [
+      { id: "one", name: "Chicken one", ingredients: ["chicken", "carrot"] },
+      { id: "two", name: "Chicken two", ingredients: ["chicken", "cabbage"] },
+    ],
+    batches: [],
+    inventory: [{ name: "chicken thighs", lowStock: false }],
+    mealHistory: [],
+    otherWeekPlan: {},
+    existingPlan: {},
+    nowMs: NOW,
+  });
+
+  assert.equal(Object.values(plan).filter(Boolean).length, 1);
+});
+
+test("Shuffle reserves protein used by other visible suggestions", () => {
+  const meals = [
+    { id: "chicken", name: "Chicken", ingredients: ["chicken"] },
+    { id: "beef", name: "Beef", ingredients: ["beef"] },
+  ];
+  const ranked = rankedMealSuggestions({
+    meals,
+    inventory: [{ name: "chicken thigh", lowStock: false }, { name: "beef mince", lowStock: false }],
+    mealHistory: [],
+    otherWeekPlan: {},
+    existingPlan: {},
+    excludedMealIds: ["chicken"],
+    reservedMealIds: ["chicken"],
+    nowMs: NOW,
+  });
+
+  assert.deepEqual(ranked.map((meal) => meal.id), ["beef"]);
 });
 
 // --- shopping ----------------------------------------------------------
@@ -670,7 +751,7 @@ test("replanning keeps hand-picked days and redoes the rest", () => {
     fromWeekday: null,
     meals: MEALS,
     batches: [],
-    inventory: [],
+    inventory: [{ name: "beef mince", lowStock: false }],
     mealHistory: [],
     otherWeekPlan: {},
     nowMs: NOW,
@@ -696,7 +777,7 @@ test("a day the planner filled is marked as the app's, a manual one is not", () 
     fromWeekday: null,
     meals: MEALS,
     batches: [],
-    inventory: [],
+    inventory: [{ name: "beef mince", lowStock: false }],
     mealHistory: [],
     otherWeekPlan: {},
     nowMs: NOW,
