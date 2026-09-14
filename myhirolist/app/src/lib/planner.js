@@ -244,7 +244,6 @@ export function rankedMealSuggestions({
   otherWeekPlan,
   existingPlan,
   excludedMealIds = [],
-  reservedMealIds = [],
   nowMs = Date.now(),
 }) {
   const mealList = asArray(meals);
@@ -263,9 +262,7 @@ export function rankedMealSuggestions({
     for (const tag of asArray(meal?.tags)) proteinCounts.set(tag, (proteinCounts.get(tag) ?? 0) + 1);
   }
 
-  const reservedPlan = Object.fromEntries(asArray(reservedMealIds).slice(0, WEEKDAYS.length).map((mealId, index) => [WEEKDAYS[index], mealId]));
-  const committed = committedIngredients([otherWeekPlan, existingPlan, reservedPlan], mealList, []);
-  const available = availableStock(inventory, committed);
+  const available = availableStock(inventory);
   const sinceCooked = recencyForMeals(mealList, mealHistory, nowMs);
 
   return mealList
@@ -336,6 +333,11 @@ export function planWeek({
     .map((b) => ({ ...b }))
     .sort((a, b) => b.portions - a.portions);
 
+  // Kitchen does not track quantities for household ingredients. A listed
+  // protein therefore remains eligible for more than one distinct meal;
+  // the no-repeat rules still prevent the same meal appearing twice.
+  const available = availableStock(inventory);
+
   for (const weekday of WEEKDAYS) {
     if (plan[weekday]) continue; // already chosen; never overwrite
     if (!fillAll) continue;
@@ -349,10 +351,6 @@ export function planWeek({
 
     let best = null;
     let bestScore = -Infinity;
-    // Recalculate after every proposed day so the same unquantified Kitchen
-    // protein is not promised to several dinners.
-    const committed = committedIngredients([otherWeekPlan, plan], mealList, batches);
-    const available = availableStock(inventory, committed);
     mealList.forEach((meal) => {
       const score = scoreMeal(meal, { sinceCooked, alreadyThisFortnight, proteinCounts, available });
       if (score === null || score <= bestScore) return;

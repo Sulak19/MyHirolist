@@ -344,7 +344,7 @@ test("running out of unused meals leaves days empty rather than repeating", () =
   assert.equal(chosen.length, 1);
 });
 
-test("one unquantified protein item is reserved for only one suggested dinner", () => {
+test("one listed protein can support several distinct suggested dinners", () => {
   const plan = planWeek({
     meals: [
       { id: "one", name: "Chicken one", ingredients: ["chicken", "carrot"] },
@@ -358,26 +358,25 @@ test("one unquantified protein item is reserved for only one suggested dinner", 
     nowMs: NOW,
   });
 
-  assert.equal(Object.values(plan).filter(Boolean).length, 1);
+  assert.deepEqual(Object.values(plan).filter(Boolean).sort(), ["one", "two"]);
 });
 
-test("Shuffle reserves protein used by other visible suggestions", () => {
+test("Shuffle can suggest another meal using the same available protein", () => {
   const meals = [
-    { id: "chicken", name: "Chicken", ingredients: ["chicken"] },
-    { id: "beef", name: "Beef", ingredients: ["beef"] },
+    { id: "first", name: "Chicken curry", ingredients: ["chicken"] },
+    { id: "second", name: "Chicken soup", ingredients: ["chicken"] },
   ];
   const ranked = rankedMealSuggestions({
     meals,
-    inventory: [{ name: "chicken thigh", lowStock: false }, { name: "beef mince", lowStock: false }],
+    inventory: [{ name: "chicken thigh", lowStock: false }],
     mealHistory: [],
     otherWeekPlan: {},
     existingPlan: {},
-    excludedMealIds: ["chicken"],
-    reservedMealIds: ["chicken"],
+    excludedMealIds: ["first"],
     nowMs: NOW,
   });
 
-  assert.deepEqual(ranked.map((meal) => meal.id), ["beef"]);
+  assert.deepEqual(ranked.map((meal) => meal.id), ["second"]);
 });
 
 // --- shopping ----------------------------------------------------------

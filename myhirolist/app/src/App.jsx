@@ -1299,8 +1299,7 @@ function PlanTab({ planWeekOf, previousWeekPlan, meals, selectedMealIds, plan, o
       ...otherSuggestions.map(([, suggestion]) => suggestion?.mealId).filter(Boolean),
       suggestions[day]?.mealId,
     ];
-    const reservedMealIds = otherSuggestions.map(([, suggestion]) => suggestion?.mealId).filter(Boolean);
-    const [pick] = rankedMealSuggestions({ ...planContext, existingPlan: plan, excludedMealIds, reservedMealIds });
+    const [pick] = rankedMealSuggestions({ ...planContext, existingPlan: plan, excludedMealIds });
     if (pick) {
       shownMealKeys.current.add(mealSuggestionKey(pick));
       setSuggestions((prev) => ({ ...prev, [day]: { type: "meal", mealId: pick.id, label: pick.name } }));
