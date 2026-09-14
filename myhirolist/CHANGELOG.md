@@ -1,3 +1,9 @@
+## 1.0.56
+
+Merge pull request #43 from Sulak19/codex/reuse-stocked-protein
+
+Allow stocked protein across meal suggestions
+
 ## 1.0.55
 
 Merge pull request #42 from Sulak19/codex/require-stocked-protein
