@@ -71,7 +71,12 @@ export function dinnerFor(data, dayOffset, nowMs) {
   }
 
   const meal = (Array.isArray(data.mealPrep) ? data.mealPrep : []).find((m) => m.id === value);
-  return meal ? meal.name : null;
+  if (meal) return meal.name;
+
+  const proteinIdea = String(value).match(/^protein-idea:(.+)$/u)?.[1];
+  return proteinIdea
+    ? `${proteinIdea.replace(/-+/gu, " ").replace(/\b\p{L}/gu, (letter) => letter.toUpperCase())} dish`
+    : null;
 }
 
 export function computeSummary(data, nowMs = Date.now()) {

@@ -27,7 +27,11 @@ import { mergeWithDefaults } from "./lib/merge.js";
 import { retirePlannedBatches, rolloverWeeks, EMPTY_WEEK } from "./lib/weeks.js";
 import {
   planWeek,
+  mealHasStockedProtein,
   mealSuggestionKey,
+  nextMealSuggestion,
+  proteinMealIdeaFromId,
+  proteinMealIdeas,
   rankedMealSuggestions,
   replan,
   shoppingNeeds,
@@ -722,7 +726,9 @@ function agendaFromData(data) {
   const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const weekday = DAY_LABELS[now.getDay()];
   const mealId = planForDate(data, now)?.[weekday];
-  const meal = mealId ? data.mealPrep.find((m) => m.id === mealId) : null;
+  const meal = mealId
+    ? data.mealPrep.find((m) => m.id === mealId) || proteinMealIdeaFromId(mealId, data.inventory)
+    : null;
   return {
     available: false,
     days: [
@@ -897,7 +903,9 @@ function HomeTab({ data, setTab, onCleaningChange, onOddJobsChange, onDogTreatme
   // Prep is a weekend job, so suggesting it on a Tuesday is just noise.
   const isPrepDay = ["Friday", "Saturday", "Sunday"].includes(todayName);
   const todaysMealId = isWeekday ? data.weekPlan?.[todayName] : null;
-  const todaysMeal = todaysMealId ? data.mealPrep.find((m) => m.id === todaysMealId) : null;
+  const todaysMeal = todaysMealId
+    ? data.mealPrep.find((m) => m.id === todaysMealId) || proteinMealIdeaFromId(todaysMealId, data.inventory)
+    : null;
 
   const dueTasks = data.cleaning.filter((c) => isDue(c));
 
@@ -1112,7 +1120,16 @@ function TapSelect({ value, valueLabel, options, searchOptions = options, onChan
 function PlanTab({ planWeekOf, previousWeekPlan, meals, selectedMealIds, plan, onPlanChange, planAuto, planWeek: activeWeek, onPlanWeekChange, otherWeekPlan, thisWeekPlan, nextWeekPlan, mealHistory, shoppingList, onShoppingChange, dismissedShopping, onDismissedShoppingChange, prepList, onPrepChange, batchList, inventory }) {
   const dates = planDates(planWeekOf, activeWeek === "next");
   const displayDate = (key) => new Date(`${key}T12:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
-  const planContext = { meals, batches: batchList, inventory, mealHistory, otherWeekPlan };
+  const generatedMealIdeas = proteinMealIdeas(meals, inventory);
+  const suggestionMeals = [...meals, ...generatedMealIdeas];
+  const planContext = {
+    meals: suggestionMeals,
+    batches: batchList,
+    inventory,
+    mealHistory,
+    otherWeekPlan,
+    allowShoppingFallback: true,
+  };
   const selectedMealIdSet = new Set(selectedMealIds || []);
   const selectedMealOptions = meals
     .filter((savedMeal) => selectedMealIdSet.has(savedMeal.id))
@@ -1122,6 +1139,7 @@ function PlanTab({ planWeekOf, previousWeekPlan, meals, selectedMealIds, plan, o
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((savedMeal) => ({ value: savedMeal.id, label: savedMeal.name }));
   const [suggestions, setSuggestions] = useState({});
+  const [shuffleMessages, setShuffleMessages] = useState({});
   const shownMealKeys = useRef(new Set());
   const shownBatchIds = useRef(new Set());
   const suggestionWeek = useRef(planWeekOf);
@@ -1133,14 +1151,14 @@ function PlanTab({ planWeekOf, previousWeekPlan, meals, selectedMealIds, plan, o
     shownMealKeys.current = new Set();
     shownBatchIds.current = new Set();
   };
-  const excludedShownMealIds = () => meals
+  const excludedShownMealIds = () => suggestionMeals
     .filter((meal) => shownMealKeys.current.has(mealSuggestionKey(meal)))
     .map((meal) => meal.id);
   const rememberSuggestions = (cards) => {
     Object.values(cards).forEach((suggestion) => {
       if (suggestion?.type === "batch") shownBatchIds.current.add(suggestion.batchId);
       if (suggestion?.type !== "meal") return;
-      const meal = meals.find((candidate) => candidate.id === suggestion.mealId);
+      const meal = suggestionMeals.find((candidate) => candidate.id === suggestion.mealId);
       if (meal) shownMealKeys.current.add(mealSuggestionKey(meal));
     });
   };
@@ -1155,8 +1173,14 @@ function PlanTab({ planWeekOf, previousWeekPlan, meals, selectedMealIds, plan, o
         const batch = batchList.find((candidate) => candidate.id === batchId);
         if (batch) next[day] = { type: "batch", batchId, label: batch.name };
       } else {
-        const meal = meals.find((candidate) => candidate.id === value);
-        if (meal) next[day] = { type: "meal", mealId: meal.id, label: meal.name };
+        const meal = suggestionMeals.find((candidate) => candidate.id === value);
+        if (meal) next[day] = {
+          type: "meal",
+          mealId: meal.id,
+          label: meal.name,
+          suggestionKind: meal.suggestionKind,
+          needsShopping: !mealHasStockedProtein(meal, inventory),
+        };
       }
     }
     return next;
@@ -1175,6 +1199,7 @@ function PlanTab({ planWeekOf, previousWeekPlan, meals, selectedMealIds, plan, o
     const next = suggestionCardsFor(proposed);
     rememberSuggestions(next);
     setSuggestions(next);
+    setShuffleMessages({});
   };
 
   // The plan is a suggestion, not a decision. Pick a different meal for one
@@ -1214,7 +1239,7 @@ function PlanTab({ planWeekOf, previousWeekPlan, meals, selectedMealIds, plan, o
       const batch = batchList.find((b) => b.id === batchId);
       return { day, meal: null, batch: batch || null };
     }
-    const meal = meals.find((m) => m.id === id) || null;
+    const meal = meals.find((m) => m.id === id) || proteinMealIdeaFromId(id, inventory);
     return { day, meal, batch: null };
   });
   const plannedMeals = [...new Map(dayAssignments.filter((assignment) => assignment.meal).map((assignment) => [assignment.meal.id, assignment.meal])).values()];
@@ -1263,6 +1288,7 @@ function PlanTab({ planWeekOf, previousWeekPlan, meals, selectedMealIds, plan, o
     const next = suggestionCardsFor(proposed);
     rememberSuggestions(next);
     setSuggestions(next);
+    setShuffleMessages({});
     // These values are persisted as immutable household updates.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan, meals, batchList, inventory, mealHistory, otherWeekPlan]);
@@ -1292,17 +1318,40 @@ function PlanTab({ planWeekOf, previousWeekPlan, meals, selectedMealIds, plan, o
     if (batchPick) {
       shownBatchIds.current.add(batchPick.id);
       setSuggestions((prev) => ({ ...prev, [day]: { type: "batch", batchId: batchPick.id, label: batchPick.name } }));
+      setShuffleMessages((current) => ({ ...current, [day]: null }));
       return;
     }
-    const excludedMealIds = [
-      ...excludedShownMealIds(),
-      ...otherSuggestions.map(([, suggestion]) => suggestion?.mealId).filter(Boolean),
-      suggestions[day]?.mealId,
-    ];
-    const [pick] = rankedMealSuggestions({ ...planContext, existingPlan: plan, excludedMealIds });
+    const visibleMealIds = otherSuggestions.map(([, suggestion]) => suggestion?.mealId).filter(Boolean);
+    const { meal: pick, cycled } = nextMealSuggestion({
+      ...planContext,
+      existingPlan: plan,
+      seenMealIds: excludedShownMealIds(),
+      visibleMealIds,
+      currentMealId: suggestions[day]?.mealId,
+    });
     if (pick) {
+      if (cycled) {
+        shownMealKeys.current = new Set(
+          visibleMealIds
+            .map((mealId) => suggestionMeals.find((meal) => meal.id === mealId))
+            .filter(Boolean)
+            .map(mealSuggestionKey)
+        );
+      }
       shownMealKeys.current.add(mealSuggestionKey(pick));
-      setSuggestions((prev) => ({ ...prev, [day]: { type: "meal", mealId: pick.id, label: pick.name } }));
+      setSuggestions((prev) => ({
+        ...prev,
+        [day]: {
+          type: "meal",
+          mealId: pick.id,
+          label: pick.name,
+          suggestionKind: pick.suggestionKind,
+          needsShopping: !mealHasStockedProtein(pick, inventory),
+        },
+      }));
+      setShuffleMessages((current) => ({ ...current, [day]: null }));
+    } else {
+      setShuffleMessages((current) => ({ ...current, [day]: "No other eligible meal is available" }));
     }
   };
 
@@ -1339,10 +1388,10 @@ function PlanTab({ planWeekOf, previousWeekPlan, meals, selectedMealIds, plan, o
       </p>
       {previousWeekPlan?.weekOf && <details style={styles.card}>
         <summary>Previous plan · {displayDate(previousWeekPlan.weekOf)}</summary>
-        {WEEKDAYS.map((day) => <p key={day}>{day}: {meals.find((m) => m.id === previousWeekPlan.plan?.[day])?.name || batchList.find((b) => `batch:${b.id}` === previousWeekPlan.plan?.[day])?.name || "Nothing planned"}</p>)}
+        {WEEKDAYS.map((day) => <p key={day}>{day}: {meals.find((m) => m.id === previousWeekPlan.plan?.[day])?.name || proteinMealIdeaFromId(previousWeekPlan.plan?.[day], inventory)?.name || batchList.find((b) => `batch:${b.id}` === previousWeekPlan.plan?.[day])?.name || "Nothing planned"}</p>)}
       </details>}
       <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 12 }}>
-        Suggestions use batch portions first, then meals with protein available in Kitchen and meals not planned in the past month — or choose any saved meal for any day.
+        Suggestions use freezer batches first, then saved meals matching Kitchen stock, unused proteins at home, and finally meals whose ingredients can be added to Shopping.
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -1382,7 +1431,13 @@ function PlanTab({ planWeekOf, previousWeekPlan, meals, selectedMealIds, plan, o
                     <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 15 }}>{suggestion.label}</div>
                   </div>
                   <div style={{ fontSize: 11.5, color: C.sage, marginTop: 2 }}>
-                    {suggestion.type === "batch" ? "suggested — from the freezer" : "suggested — balances stock and recent meals"}
+                    {suggestion.type === "batch"
+                      ? "suggested — from the freezer"
+                      : suggestion.suggestionKind === "protein-idea"
+                        ? "suggested — use an unlinked protein from Kitchen"
+                        : suggestion.needsShopping
+                          ? "suggested — ingredients can be added to Shopping"
+                          : "suggested — balances stock and recent meals"}
                   </div>
                   <div style={{ display: "flex", gap: 14, marginTop: 8 }}>
                     <button style={{ ...styles.linkBtnSmall, color: C.teal }} onClick={() => useSuggestion(day)}>
@@ -1392,9 +1447,14 @@ function PlanTab({ planWeekOf, previousWeekPlan, meals, selectedMealIds, plan, o
                       Shuffle
                     </button>
                   </div>
+                  {shuffleMessages[day] && (
+                    <div role="status" style={{ fontSize: 11.5, color: C.inkSoft, marginTop: 6 }}>{shuffleMessages[day]}</div>
+                  )}
                 </div>
               ) : (
-                <div style={{ fontSize: 13, color: C.inkFaint, fontStyle: "italic" }}>No unused meal matches protein available in Kitchen</div>
+                <div style={{ fontSize: 13, color: C.inkFaint, fontStyle: "italic" }}>
+                  {meals.length === 0 ? "Add a saved meal to receive suggestions" : "No unused meal suggestion is available"}
+                </div>
               )}
 
               <div style={{ marginTop: 10 }}>

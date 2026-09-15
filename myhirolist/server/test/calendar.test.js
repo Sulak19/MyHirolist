@@ -100,6 +100,13 @@ test("a plan pointing at a deleted meal produces no event", () => {
   assert.deepEqual(planEvents(data, NOW), []);
 });
 
+test("a generic protein idea becomes a dinner event without a Saved Meal", () => {
+  const data = { mealPrep: [], weekPlan: { Monday: "protein-idea:salmon" } };
+  assert.deepEqual(planEvents(data, NOW), [
+    { key: "meal:2026-08-24", summary: "Dinner: Salmon dish", date: "2026-08-24" },
+  ]);
+});
+
 test("food expiring within seven days is kept on Today as Use up", () => {
   const data = {
     inventory: [

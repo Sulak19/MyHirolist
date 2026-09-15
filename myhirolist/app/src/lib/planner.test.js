@@ -10,6 +10,9 @@ import {
   availableStock,
   daysSinceCooked,
   mealSuggestionKey,
+  proteinMealIdeaFromId,
+  proteinMealIdeas,
+  nextMealSuggestion,
   planWeek,
   rankedMealSuggestions,
   shoppingNeeds,
@@ -141,6 +144,84 @@ test("automatic suggestions require a recognised protein that is not low", () =>
   });
 
   assert.deepEqual(ranked.map((meal) => meal.id), ["salmon"]);
+});
+
+test("an unlinked stocked protein becomes a generic meal idea", () => {
+  const ideas = proteinMealIdeas(
+    [{ id: "chicken", name: "Chicken curry", ingredients: ["chicken thigh"] }],
+    [
+      { name: "Frozen salmon fillets", lowStock: false },
+      { name: "Pork belly", lowStock: true },
+      { name: "Chicken thighs", lowStock: false },
+    ]
+  );
+
+  assert.deepEqual(ideas, [{
+    id: "protein-idea:salmon",
+    name: "Salmon dish",
+    ingredients: ["Frozen salmon fillets"],
+    tags: ["Salmon"],
+    suggestionKind: "protein-idea",
+  }]);
+});
+
+test("a generic protein plan reference resolves without a Saved Meal record", () => {
+  const meal = proteinMealIdeaFromId(
+    "protein-idea:salmon",
+    [{ name: "Frozen salmon fillets", lowStock: false }]
+  );
+
+  assert.deepEqual(meal, {
+    id: "protein-idea:salmon",
+    name: "Salmon dish",
+    ingredients: ["Frozen salmon fillets"],
+    tags: ["Salmon"],
+    suggestionKind: "protein-idea",
+  });
+});
+
+test("a planned protein idea still resolves for shopping without a Saved Meal", () => {
+  const inventory = [{ name: "Frozen salmon fillets", lowStock: false }];
+  const needs = shoppingNeeds(
+    [{ plan: { Monday: "protein-idea:salmon" }, week: "this" }],
+    [],
+    [],
+    inventory
+  );
+
+  assert.deepEqual(needs, []);
+});
+
+test("unlinked stocked protein is suggested before a meal that needs shopping", () => {
+  const savedMeal = { id: "pork", name: "Pork noodles", ingredients: ["pork", "noodles"] };
+  const inventory = [{ name: "Frozen salmon fillets", lowStock: false }];
+  const meals = [savedMeal, ...proteinMealIdeas([savedMeal], inventory)];
+  const ranked = rankedMealSuggestions({
+    meals,
+    inventory,
+    mealHistory: [],
+    otherWeekPlan: {},
+    existingPlan: {},
+    allowShoppingFallback: true,
+    nowMs: NOW,
+  });
+
+  assert.deepEqual(ranked.map((meal) => meal.id), ["protein-idea:salmon", "pork"]);
+});
+
+test("saved meals are suggested for shopping when no protein is at home", () => {
+  const plan = planWeek({
+    meals: [MEALS[0], MEALS[2]],
+    batches: [],
+    inventory: [],
+    mealHistory: [],
+    otherWeekPlan: {},
+    existingPlan: {},
+    allowShoppingFallback: true,
+    nowMs: NOW,
+  });
+
+  assert.deepEqual(Object.values(plan).filter(Boolean), ["karaage", "hamburg"]);
 });
 
 test("compatible meat cuts and alternative proteins qualify a meal", () => {
@@ -377,6 +458,43 @@ test("Shuffle can suggest another meal using the same available protein", () => 
   });
 
   assert.deepEqual(ranked.map((meal) => meal.id), ["second"]);
+});
+
+test("Shuffle starts a new cycle after every eligible meal has been shown", () => {
+  const meals = [
+    { id: "one", name: "Chicken curry", ingredients: ["chicken"] },
+    { id: "two", name: "Chicken soup", ingredients: ["chicken"] },
+    { id: "three", name: "Chicken stir-fry", ingredients: ["chicken"] },
+  ];
+  const result = nextMealSuggestion({
+    meals,
+    inventory: [{ name: "chicken thighs", lowStock: false }],
+    mealHistory: [],
+    otherWeekPlan: {},
+    existingPlan: {},
+    seenMealIds: ["one", "two", "three"],
+    visibleMealIds: ["two"],
+    currentMealId: "three",
+    nowMs: NOW,
+  });
+
+  assert.equal(result.cycled, true);
+  assert.equal(result.meal.id, "one");
+});
+
+test("Shuffle reports no result when every eligible meal is already on screen", () => {
+  const meal = { id: "only", name: "Chicken curry", ingredients: ["chicken"] };
+  const result = nextMealSuggestion({
+    meals: [meal],
+    inventory: [{ name: "chicken thighs", lowStock: false }],
+    mealHistory: [],
+    otherWeekPlan: {},
+    existingPlan: {},
+    currentMealId: "only",
+    nowMs: NOW,
+  });
+
+  assert.deepEqual(result, { meal: null, cycled: false });
 });
 
 // --- shopping ----------------------------------------------------------

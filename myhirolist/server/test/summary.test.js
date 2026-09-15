@@ -156,6 +156,11 @@ test("a batch dinner is named as one, and a missing plan is null", () => {
   assert.equal(dinnerFor({}, 0, WED), null);
 });
 
+test("a generic protein idea is named without a Saved Meal record", () => {
+  const data = { mealPrep: [], weekPlan: { Wednesday: "protein-idea:salmon" } };
+  assert.equal(dinnerFor(data, 0, WED), "Salmon dish");
+});
+
 test("the spoken summary reads naturally and only mentions what exists", () => {
   const quiet = describeToday(computeSummary({}, WED));
   assert.equal(quiet, "Nothing is planned for dinner.");
