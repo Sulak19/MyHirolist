@@ -115,9 +115,76 @@ function proteinIngredients(meal) {
   return asArray(meal?.ingredients).filter(isProtein);
 }
 
+export function mealHasStockedProtein(meal, inventory) {
+  const available = availableStock(inventory);
+  return proteinIngredients(meal).some((ingredient) => availableIngredientMatches(available, ingredient));
+}
+
+const titleCase = (value) => String(value ?? "").replace(/\b\p{L}/gu, (letter) => letter.toUpperCase());
+
+const PROTEIN_IDEA_PREFIX = "protein-idea:";
+
+function proteinIdeaParts(itemName) {
+  const requirementKeys = ingredientRequirementKeys(itemName);
+  const species = requirementKeys
+    .map((key) => key.match(/^meat:([^:]+):/u)?.[1])
+    .find(Boolean);
+  const protein = species || itemKey(itemName).replace(/^frozen\s+/u, "");
+  if (!protein) return null;
+  return {
+    id: `${PROTEIN_IDEA_PREFIX}${protein.replace(/\s+/gu, "-")}`,
+    protein,
+    species,
+  };
+}
+
+/** Resolves a special meal-plan reference without adding it to Saved Meals. */
+export function proteinMealIdeaFromId(id, inventory = []) {
+  const value = String(id ?? "");
+  if (!value.startsWith(PROTEIN_IDEA_PREFIX)) return null;
+
+  const stockedItem = asArray(inventory).find((item) => (
+    !item?.lowStock
+    && isProtein(item?.name)
+    && proteinIdeaParts(item.name)?.id === value
+  ));
+  const protein = proteinIdeaParts(stockedItem?.name)?.protein
+    || value.slice(PROTEIN_IDEA_PREFIX.length).replace(/-+/gu, " ");
+  if (!protein) return null;
+
+  return {
+    id: value,
+    name: `${titleCase(protein)} dish`,
+    ingredients: [stockedItem?.name || protein],
+    tags: [titleCase(proteinIdeaParts(stockedItem?.name)?.species || "Misc")],
+    suggestionKind: "protein-idea",
+  };
+}
+
+/** Creates one lightweight idea for each stocked protein that is not
+ * represented by an existing meal. Only its special ID is stored in a plan;
+ * the idea itself never enters the household's Saved Meals catalogue. */
+export function proteinMealIdeas(meals, inventory) {
+  const mealList = asArray(meals);
+  const ideas = new Map();
+
+  for (const item of asArray(inventory)) {
+    if (item?.lowStock || !isProtein(item?.name)) continue;
+    const linked = mealList.some((meal) => proteinIngredients(meal)
+      .some((ingredient) => ingredientMatchesStock(ingredient, item.name)));
+    if (linked) continue;
+
+    const parts = proteinIdeaParts(item.name);
+    if (!parts || ideas.has(parts.protein)) continue;
+    ideas.set(parts.protein, proteinMealIdeaFromId(parts.id, [item]));
+  }
+
+  return [...ideas.values()];
+}
+
 // --- resolving plans to meals -----------------------------------------
 
-export function resolvePlanned(plan, meals, batches) {
+export function resolvePlanned(plan, meals, batches, inventory = []) {
   const resolved = [];
   for (const weekday of WEEKDAYS) {
     const value = plan?.[weekday];
@@ -128,7 +195,8 @@ export function resolvePlanned(plan, meals, batches) {
       if (batch) resolved.push({ weekday, batch, meal: null });
       continue;
     }
-    const meal = asArray(meals).find((m) => m.id === value);
+    const meal = asArray(meals).find((m) => m.id === value)
+      || proteinMealIdeaFromId(value, inventory);
     if (meal) resolved.push({ weekday, meal, batch: null });
   }
   return resolved;
@@ -187,7 +255,7 @@ const RECENT_DAYS = 30;
  * Scores a meal for a slot. Higher is better; null means "do not use".
  */
 export function scoreMeal(meal, context) {
-  const { sinceCooked, alreadyThisFortnight, proteinCounts, available } = context;
+  const { sinceCooked, alreadyThisFortnight, proteinCounts, available, allowMissingProtein = false } = context;
   if (!meal) return null;
   if (alreadyThisFortnight.has(meal.id) || alreadyThisFortnight.has(mealSuggestionKey(meal))) return null;
 
@@ -195,7 +263,8 @@ export function scoreMeal(meal, context) {
   // genuinely available. Meals with incomplete ingredient records are left
   // for manual selection rather than guessed from a broad tag.
   const proteins = proteinIngredients(meal);
-  if (proteins.length === 0 || !proteins.some((ingredient) => availableIngredientMatches(available, ingredient))) return null;
+  const hasStockedProtein = proteins.some((ingredient) => availableIngredientMatches(available, ingredient));
+  if (proteins.length === 0 || (!hasStockedProtein && !allowMissingProtein)) return null;
 
   let score = 100;
 
@@ -244,6 +313,7 @@ export function rankedMealSuggestions({
   otherWeekPlan,
   existingPlan,
   excludedMealIds = [],
+  allowShoppingFallback = false,
   nowMs = Date.now(),
 }) {
   const mealList = asArray(meals);
@@ -269,11 +339,35 @@ export function rankedMealSuggestions({
     .map((meal, index) => ({
       meal,
       index,
-      score: scoreMeal(meal, { sinceCooked, alreadyThisFortnight, proteinCounts, available }),
+      tier: meal.suggestionKind === "protein-idea"
+        ? 1
+        : mealHasStockedProtein(meal, inventory) ? 0 : 2,
+      score: scoreMeal(meal, {
+        sinceCooked,
+        alreadyThisFortnight,
+        proteinCounts,
+        available,
+        allowMissingProtein: allowShoppingFallback,
+      }),
     }))
     .filter(({ score }) => score !== null)
-    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .sort((left, right) => left.tier - right.tier || right.score - left.score || left.index - right.index)
     .map(({ meal }) => meal);
+}
+
+/** Picks the next Shuffle result. It exhausts unseen eligible meals first,
+ * then starts a new cycle without duplicating a meal currently planned,
+ * visible on another day, or already displayed in the target card. */
+export function nextMealSuggestion({ seenMealIds = [], visibleMealIds = [], currentMealId = null, ...context }) {
+  const onScreen = [...asArray(visibleMealIds), currentMealId].filter(Boolean);
+  const unseen = rankedMealSuggestions({
+    ...context,
+    excludedMealIds: [...asArray(seenMealIds), ...onScreen],
+  })[0];
+  if (unseen) return { meal: unseen, cycled: false };
+
+  const cycled = rankedMealSuggestions({ ...context, excludedMealIds: onScreen })[0];
+  return { meal: cycled ?? null, cycled: Boolean(cycled) };
 }
 
 /**
@@ -295,6 +389,7 @@ export function planWeek({
   excludedBatchIds = [],
   nowMs = Date.now(),
   fillAll = true,
+  allowShoppingFallback = false,
 }) {
   const mealList = asArray(meals);
   const plan = { ...(existingPlan ?? {}) };
@@ -352,10 +447,21 @@ export function planWeek({
     let best = null;
     let bestScore = -Infinity;
     mealList.forEach((meal) => {
-      const score = scoreMeal(meal, { sinceCooked, alreadyThisFortnight, proteinCounts, available });
-      if (score === null || score <= bestScore) return;
+      const score = scoreMeal(meal, {
+        sinceCooked,
+        alreadyThisFortnight,
+        proteinCounts,
+        available,
+        allowMissingProtein: allowShoppingFallback,
+      });
+      if (score === null) return;
+      const tier = meal.suggestionKind === "protein-idea"
+        ? 1
+        : mealHasStockedProtein(meal, inventory) ? 0 : 2;
+      const weightedScore = score - (tier * 1000);
+      if (weightedScore <= bestScore) return;
       best = meal;
-      bestScore = score;
+      bestScore = weightedScore;
     });
 
     if (!best) continue; // ran out of meals that have not been used
@@ -430,7 +536,7 @@ export function shoppingNeeds(weeks, meals, batches, inventory) {
     const plan = entry?.plan ?? entry;
     const week = entry?.week ?? null;
 
-    for (const { meal } of resolvePlanned(plan, meals, batches)) {
+    for (const { meal } of resolvePlanned(plan, meals, batches, inventory)) {
       for (const ingredient of asArray(meal?.ingredients)) {
         if (availableIngredientMatches(stocked, ingredient)) continue;
         if (prepOnly.has(norm(ingredient))) continue;
@@ -703,7 +809,7 @@ export function prepTasks(thisWeekPlan, _nextWeekPlan, meals, batches, inventory
   }
 
   const seenMeals = new Set();
-  for (const { meal } of resolvePlanned(thisWeekPlan, meals, batches)) {
+  for (const { meal } of resolvePlanned(thisWeekPlan, meals, batches, inventory)) {
     if (!meal || seenMeals.has(meal.id)) continue;
     seenMeals.add(meal.id);
     collectMealPrep(tasks, meal, "this");

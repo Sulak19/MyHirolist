@@ -110,7 +110,12 @@ function mealNameFor(data, value) {
   }
 
   const meal = asArray(data.mealPrep).find((item) => item.id === value);
-  return meal ? meal.name : null;
+  if (meal) return meal.name;
+
+  const proteinIdea = String(value).match(/^protein-idea:(.+)$/u)?.[1];
+  return proteinIdea
+    ? `${proteinIdea.replace(/-+/gu, " ").replace(/\b\p{L}/gu, (letter) => letter.toUpperCase())} dish`
+    : null;
 }
 
 // The date a cleaning task is next due, or null if it has no schedule.
