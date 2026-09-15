@@ -1,3 +1,9 @@
+## 1.0.58
+
+Merge pull request #45 from Sulak19/codex/seasonal-meal-specials
+
+Add seasonal meal specials
+
 ## 1.0.57
 
 Merge pull request #44 from Sulak19/codex/fix-meal-shuffle
