@@ -1,3 +1,9 @@
+## 1.0.57
+
+Merge pull request #44 from Sulak19/codex/fix-meal-shuffle
+
+Fix and extend meal plan suggestions
+
 ## 1.0.56
 
 Merge pull request #43 from Sulak19/codex/reuse-stocked-protein
