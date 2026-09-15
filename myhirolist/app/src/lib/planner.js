@@ -17,6 +17,17 @@ const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 const norm = (value) => String(value ?? "").trim().toLowerCase();
 const asArray = (value) => (Array.isArray(value) ? value : []);
 
+// Brisbane's warmer half of the year runs from October through March. Meals
+// without a season remain eligible year-round; manual plan choices are never
+// filtered by this helper.
+export function mealIsInSeason(meal, nowMs = Date.now()) {
+  const season = norm(meal?.season);
+  if (season !== "summer" && season !== "winter") return true;
+  const month = new Date(nowMs).getMonth();
+  const hotterMonths = month >= 9 || month <= 2;
+  return season === "summer" ? hotterMonths : !hotterMonths;
+}
+
 // Saved data can contain two records for the same named meal. Suggestions
 // treat those as one choice even when their IDs differ.
 export function mealSuggestionKey(meal) {
@@ -336,6 +347,7 @@ export function rankedMealSuggestions({
   const sinceCooked = recencyForMeals(mealList, mealHistory, nowMs);
 
   return mealList
+    .filter((meal) => mealIsInSeason(meal, nowMs))
     .map((meal, index) => ({
       meal,
       index,
@@ -432,6 +444,7 @@ export function planWeek({
   // protein therefore remains eligible for more than one distinct meal;
   // the no-repeat rules still prevent the same meal appearing twice.
   const available = availableStock(inventory);
+  const eligibleMealList = mealList.filter((meal) => mealIsInSeason(meal, nowMs));
 
   for (const weekday of WEEKDAYS) {
     if (plan[weekday]) continue; // already chosen; never overwrite
@@ -446,7 +459,7 @@ export function planWeek({
 
     let best = null;
     let bestScore = -Infinity;
-    mealList.forEach((meal) => {
+    eligibleMealList.forEach((meal) => {
       const score = scoreMeal(meal, {
         sinceCooked,
         alreadyThisFortnight,

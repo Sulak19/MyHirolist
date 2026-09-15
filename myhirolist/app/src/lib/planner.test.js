@@ -9,6 +9,7 @@ import {
   committedIngredients,
   availableStock,
   daysSinceCooked,
+  mealIsInSeason,
   mealSuggestionKey,
   proteinMealIdeaFromId,
   proteinMealIdeas,
@@ -144,6 +145,57 @@ test("automatic suggestions require a recognised protein that is not low", () =>
   });
 
   assert.deepEqual(ranked.map((meal) => meal.id), ["salmon"]);
+});
+
+test("seasonal meals follow Brisbane's hotter and colder months", () => {
+  const january = new Date(2026, 0, 15, 12).getTime();
+  const july = new Date(2026, 6, 15, 12).getTime();
+
+  assert.equal(mealIsInSeason({ season: "summer" }, january), true);
+  assert.equal(mealIsInSeason({ season: "summer" }, july), false);
+  assert.equal(mealIsInSeason({ season: "winter" }, january), false);
+  assert.equal(mealIsInSeason({ season: "winter" }, july), true);
+  assert.equal(mealIsInSeason({}, january), true);
+  assert.equal(mealIsInSeason({}, july), true);
+});
+
+test("ranked suggestions exclude out-of-season specials", () => {
+  const meals = [
+    { id: "summer", name: "Summer salad", season: "summer", ingredients: ["chicken"] },
+    { id: "winter", name: "Winter stew", season: "winter", ingredients: ["chicken"] },
+    { id: "always", name: "Chicken rice", ingredients: ["chicken"] },
+  ];
+  const common = {
+    meals,
+    inventory: [{ name: "chicken", lowStock: false }],
+    mealHistory: [],
+    otherWeekPlan: {},
+    existingPlan: {},
+  };
+
+  const january = rankedMealSuggestions({ ...common, nowMs: new Date(2026, 0, 15, 12).getTime() });
+  const july = rankedMealSuggestions({ ...common, nowMs: new Date(2026, 6, 15, 12).getTime() });
+
+  assert.deepEqual(january.map((meal) => meal.id).sort(), ["always", "summer"]);
+  assert.deepEqual(july.map((meal) => meal.id).sort(), ["always", "winter"]);
+});
+
+test("whole-week suggestions also exclude out-of-season specials", () => {
+  const plan = planWeek({
+    meals: [
+      { id: "summer", name: "Summer salad", season: "summer", ingredients: ["chicken"] },
+      { id: "winter", name: "Winter stew", season: "winter", ingredients: ["chicken"] },
+    ],
+    batches: [],
+    inventory: [{ name: "chicken", lowStock: false }],
+    mealHistory: [],
+    otherWeekPlan: {},
+    existingPlan: {},
+    nowMs: new Date(2026, 6, 15, 12).getTime(),
+  });
+
+  assert.ok(Object.values(plan).includes("winter"));
+  assert.ok(!Object.values(plan).includes("summer"));
 });
 
 test("an unlinked stocked protein becomes a generic meal idea", () => {

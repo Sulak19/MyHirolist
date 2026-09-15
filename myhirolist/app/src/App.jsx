@@ -27,6 +27,7 @@ import { mergeWithDefaults } from "./lib/merge.js";
 import { retirePlannedBatches, rolloverWeeks, EMPTY_WEEK } from "./lib/weeks.js";
 import {
   planWeek,
+  mealIsInSeason,
   mealHasStockedProtein,
   mealSuggestionKey,
   nextMealSuggestion,
@@ -1391,7 +1392,7 @@ function PlanTab({ planWeekOf, previousWeekPlan, meals, selectedMealIds, plan, o
         {WEEKDAYS.map((day) => <p key={day}>{day}: {meals.find((m) => m.id === previousWeekPlan.plan?.[day])?.name || proteinMealIdeaFromId(previousWeekPlan.plan?.[day], inventory)?.name || batchList.find((b) => `batch:${b.id}` === previousWeekPlan.plan?.[day])?.name || "Nothing planned"}</p>)}
       </details>}
       <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 12 }}>
-        Suggestions use freezer batches first, then saved meals matching Kitchen stock, unused proteins at home, and finally meals whose ingredients can be added to Shopping.
+        Suggestions use freezer batches first, then in-season saved meals matching Kitchen stock, unused proteins at home, and finally meals whose ingredients can be added to Shopping.
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -1498,6 +1499,11 @@ function PlanTab({ planWeekOf, previousWeekPlan, meals, selectedMealIds, plan, o
 
 /* ---------------- MEALS ---------------- */
 const PROTEIN_ORDER = ["Chicken", "Beef", "Pork", "Lamb", "Fish", "Misc"];
+const MEAL_SEASONS = [
+  { value: "", label: "All year" },
+  { value: "summer", label: "Summer special" },
+  { value: "winter", label: "Winter special" },
+];
 
 /* Reads a File/Blob and redraws it through a canvas to normalize to JPEG.
    Fixes iPhone photos captured as HEIC, which the vision API rejects. */
@@ -1566,6 +1572,7 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
   const [name, setName] = useState("");
   const [ingredients, setIngredientsDraft] = useState("");
   const [tagVals, setTagVals] = useState(new Set(["Misc"]));
+  const [season, setSeason] = useState("");
   const [url, setUrl] = useState("");
   const [prepNotes, setPrepNotes] = useState("");
   const [showAddMeal, setShowAddMeal] = useState(false);
@@ -1602,7 +1609,9 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
     });
 
   const surpriseMe = () => {
-    const eligible = list.filter((m) => (m.tags || []).some((t) => meatFilter.has(t)));
+    const eligible = list.filter((m) => (
+      mealIsInSeason(m) && (m.tags || []).some((t) => meatFilter.has(t))
+    ));
     if (eligible.length === 0) {
       setRandomPick(null);
       return;
@@ -1616,6 +1625,7 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
     setUrl("");
     setPrepNotes("");
     setTagVals(new Set(["Misc"]));
+    setSeason("");
   };
   const closeAddMeal = () => {
     resetAddDraft();
@@ -1630,6 +1640,7 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
         id: uid(),
         name: name.trim(),
         tags,
+        season: season || undefined,
         url: url.trim() || undefined,
         prepNotes: prepNotes.trim() || undefined,
         ingredients: ingredients.split(",").map((item) => item.trim()).filter(Boolean),
@@ -1662,6 +1673,10 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
         return { ...m, tags: current.size > 0 ? [...current] : ["Misc"] };
       })
     );
+  const setMealSeason = (id, nextSeason) =>
+    onChange(list.map((m) => (
+      m.id === id ? { ...m, season: nextSeason || undefined } : m
+    )));
   const toggleSelect = (id) =>
     setSelected((s) => {
       const next = new Set(s);
@@ -1685,8 +1700,14 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
     const inName = m.name.toLowerCase().includes(q);
     const inIngredients = (m.ingredients || []).some((i) => i.toLowerCase().includes(q));
     const inTags = (m.tags || []).some((t) => t.toLowerCase().includes(q));
-    return inName || inIngredients || inTags;
+    const inSeason = `${m.season || "all year"} special`.includes(q);
+    return inName || inIngredients || inTags || inSeason;
   });
+  const mealSections = [
+    { key: "summer", title: "Summer specials", items: filteredList.filter((m) => m.season === "summer") },
+    { key: "winter", title: "Winter specials", items: filteredList.filter((m) => m.season === "winter") },
+    { key: "all-year", title: "All-year meals", items: filteredList.filter((m) => !m.season) },
+  ].filter((section) => section.items.length > 0);
 
   return (
     <div>
@@ -1705,6 +1726,10 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
         value={query}
         onChange={setQuery}
       />
+
+      <div style={{ fontSize: 12, color: C.inkSoft, marginTop: 8 }}>
+        Summer specials are suggested October–March; Winter specials are suggested April–September. Manual choices stay available all year.
+      </div>
 
       <div style={{ marginTop: 14 }}>
         <div style={{ fontSize: 11, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
@@ -1816,7 +1841,10 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
       )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
-        {filteredList.map((m) => {
+        {mealSections.map((section) => (
+          <React.Fragment key={section.key}>
+            <h3 style={{ ...styles.h2, fontSize: 17, margin: "12px 0 2px" }}>{section.title}</h3>
+            {section.items.map((m) => {
           const isSelected = selected.has(m.id);
           return (
             <div key={m.id} style={{ ...styles.row, alignItems: "flex-start", borderColor: isSelected ? C.teal : C.line }}>
@@ -1866,6 +1894,28 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
                     </button>
                   ))}
                 </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 6 }}>
+                  {MEAL_SEASONS.map((option) => {
+                    const active = (m.season || "") === option.value;
+                    return (
+                      <button
+                        key={option.value || "all-year"}
+                        onClick={() => setMealSeason(m.id, option.value)}
+                        style={{
+                          ...styles.chip,
+                          padding: "3px 8px",
+                          fontSize: 10.5,
+                          background: active ? C.sage : C.inset,
+                          color: active ? C.paper : C.inkFaint,
+                          border: "none",
+                          cursor: "pointer",
+                        }}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
                 {m.url && (
                   <a href={m.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: C.teal, marginTop: 6, display: "inline-block" }}>
                     Recipe ↗
@@ -1889,7 +1939,9 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
               </button>
             </div>
           );
-        })}
+            })}
+          </React.Fragment>
+        ))}
       </div>
       {list.length === 0 && <Empty text="No saved meals yet — use Add meal to save your go-tos." />}
       {list.length > 0 && filteredList.length === 0 && <Empty text="No meals match that filter." />}
@@ -1948,6 +2000,34 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
                       }}
                     >
                       {tag}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={{ marginTop: 14 }}>
+              <div style={{ fontSize: 11, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
+                Season
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {MEAL_SEASONS.map((option) => {
+                  const active = season === option.value;
+                  return (
+                    <button
+                      type="button"
+                      key={option.value || "all-year"}
+                      onClick={() => setSeason(option.value)}
+                      style={{
+                        ...styles.tabBtn,
+                        padding: "5px 10px",
+                        fontSize: 11.5,
+                        background: active ? C.sage : C.card,
+                        color: active ? C.paper : C.ink,
+                        borderColor: active ? C.sage : C.line,
+                      }}
+                    >
+                      {option.label}
                     </button>
                   );
                 })}
@@ -3846,7 +3926,7 @@ function RecipesTab({ list, onChange }) {
   const scanAvailable = useScanAvailable();
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState("");
-  const [draft, setDraft] = useState(null); // { name, tag, ingredients: string, instructions, url }
+  const [draft, setDraft] = useState(null); // { name, tag, season, ingredients: string, instructions, url }
 
   const setInstructions = (id, text) => onChange(list.map((m) => (m.id === id ? { ...m, instructions: text } : m)));
 
@@ -3878,6 +3958,7 @@ function RecipesTab({ list, onChange }) {
         setDraft({
           name: result.name || "",
           tag: "Misc",
+          season: "",
           ingredients: Array.isArray(result.ingredients) ? result.ingredients.join(", ") : "",
           instructions: result.instructions || "",
           url: "",
@@ -3897,6 +3978,7 @@ function RecipesTab({ list, onChange }) {
       id: uid(),
       name: draft.name.trim(),
       tags: [draft.tag],
+      season: draft.season || undefined,
       ingredients: draft.ingredients.split(",").map((s) => s.trim()).filter(Boolean),
       instructions: draft.instructions,
       url: draft.url.trim() || undefined,
@@ -3952,6 +4034,13 @@ function RecipesTab({ list, onChange }) {
                   ))}
                 </select>
               </Field>
+              <Field label="Season" style={{ flex: 1 }}>
+                <select style={{ ...styles.select, width: "100%" }} value={draft.season || ""} onChange={(e) => setDraft({ ...draft, season: e.target.value })}>
+                  {MEAL_SEASONS.map((option) => (
+                    <option key={option.value || "all-year"} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </Field>
             </div>
             <Field label="Ingredients (comma separated)" style={{ marginTop: 10 }}>
               <input style={{ ...styles.input, width: "100%" }} value={draft.ingredients} onChange={(e) => setDraft({ ...draft, ingredients: e.target.value })} />
@@ -3997,6 +4086,9 @@ function RecipesTab({ list, onChange }) {
                   >
                     <div>
                       <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 15 }}>{m.name}</div>
+                      {m.season && (
+                        <div style={{ fontSize: 11, color: C.sage, marginTop: 2, textTransform: "capitalize" }}>{m.season} special</div>
+                      )}
                       {!open && m.ingredients?.length > 0 && (
                         <div style={{ fontSize: 12, color: C.inkSoft, marginTop: 2 }}>{m.ingredients.join(", ")}</div>
                       )}
