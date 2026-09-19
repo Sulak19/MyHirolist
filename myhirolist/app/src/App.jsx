@@ -66,6 +66,7 @@ import { applyCatalogue, findIngredient, saveIngredient, catalogueError } from "
 import { planDates, addDays, planForDate } from "./lib/weeks.js";
 import { migrateDogFood, foodSupply, renameDogs } from "./lib/dogFood.js";
 import { DogFoodToday, SharedDogFoods } from "./DogFood.jsx";
+import { DogRecipes } from "./DogRecipes.jsx";
 
 /* ---------------------------------------------------------
    Home Base — a household dashboard
@@ -348,6 +349,7 @@ const GROUPS = [
     icon: Dog,
     screens: [
       { key: "dogFood", label: "Food & treats", icon: Dog },
+      { key: "dogRecipes", label: "Recipes", icon: BookOpen },
       { key: "dogTreatments", label: "Treatments", icon: Pill },
       { key: "dogShopping", label: "Shopping list", icon: ShoppingCart },
     ],
@@ -656,6 +658,7 @@ export default function HomeBase() {
             onDogShoppingChange={(v) => update("dogShoppingList", v)}
           />
         )}
+        {tab === "dogRecipes" && <DogRecipes />}
         {tab === "fridge" && (
           <FridgeTab
             catalogue={data.ingredientCatalogue || []}
