@@ -56,7 +56,7 @@ import {
 } from "./lib/dogTreatments.js";
 import { getToday } from "./lib/api.js";
 import { C, useTheme } from "./lib/theme.js";
-import { clearLowStockForPrep, dedupeInventoryItems, dedupeShoppingItems, itemKey, moveInventoryItem, staplesFirst, withInventoryStaples } from "./lib/inventory.js";
+import { clearLowStockForPrep, dedupeInventoryItems, dedupeShoppingItems, editInventoryItem, itemKey, moveInventoryItem, staplesFirst, withInventoryStaples } from "./lib/inventory.js";
 import { completeOddJob, inventoryUseUpToday, oddJobsDueToday, shouldShowMealPrepToday } from "./lib/today.js";
 import { cleaningTaskStatus, sortCleaningTasks } from "./lib/cleaning.js";
 import { clearPrepItems, visiblePrepItems } from "./lib/prepCompletion.js";
@@ -3472,6 +3472,7 @@ function FridgeTab({ catalogue, list, onChange, shoppingList, onShoppingChange }
   };
   const remove = (id) => onChange(list.filter((i) => i.id !== id));
   const moveTo = (id, location, isStaple) => onChange(moveInventoryItem(list, id, location, isStaple));
+  const editItem = (id, updates) => onChange(editInventoryItem(list, id, updates));
   const setItemStaple = (id, isStaple) =>
     onChange(list.map((item) => (item.id === id ? { ...item, staple: isStaple } : item)));
   const toggleLowStock = (id) => {
@@ -3705,6 +3706,7 @@ function FridgeTab({ catalogue, list, onChange, shoppingList, onShoppingChange }
           onRemove={remove}
           onToggleLowStock={toggleLowStock}
           onMove={moveTo}
+          onEdit={editItem}
           onSetStaple={setItemStaple}
         />
       )}
@@ -3715,7 +3717,7 @@ function FridgeTab({ catalogue, list, onChange, shoppingList, onShoppingChange }
   );
 }
 
-function InventoryGroup({ title, icon: Icon, items, onRemove, onToggleLowStock, onMove, onSetStaple }) {
+function InventoryGroup({ title, icon: Icon, items, onRemove, onToggleLowStock, onMove, onEdit, onSetStaple }) {
   const isPantry = title === "Pantry" || title === "Supplements";
   const [open, setOpen] = useState(title === RECENT_SHOP);
   const sortedItems = staplesFirst(items);
@@ -3764,8 +3766,40 @@ function InventoryGroup({ title, icon: Icon, items, onRemove, onToggleLowStock, 
               }}
             >
               <div style={{ flex: 1 }}>
-                <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 15 }}>{i.name}</div>
-                {!isPantry && i.expiry && (
+                {onEdit ? (
+                  <input
+                    key={`name-${i.id}-${i.name}`}
+                    aria-label={`Name for ${i.name}`}
+                    style={{ ...styles.input, width: "100%", padding: "6px 8px", fontSize: 14 }}
+                    defaultValue={i.name}
+                    onBlur={(e) => {
+                      const nextName = e.currentTarget.value.trim();
+                      if (!nextName) {
+                        e.currentTarget.value = i.name;
+                        return;
+                      }
+                      if (nextName !== i.name) onEdit(i.id, { name: nextName });
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") e.currentTarget.blur();
+                    }}
+                  />
+                ) : (
+                  <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 15 }}>{i.name}</div>
+                )}
+                {onEdit && (
+                  <label style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 6, fontSize: 11.5, color: C.inkSoft }}>
+                    <span style={{ flexShrink: 0 }}>Use by</span>
+                    <input
+                      type="date"
+                      aria-label={`Use by date for ${i.name}`}
+                      style={{ ...styles.input, padding: "5px 7px", fontSize: 12, width: "100%", maxWidth: 165 }}
+                      value={i.expiry || ""}
+                      onChange={(e) => onEdit(i.id, { expiry: e.target.value || null })}
+                    />
+                  </label>
+                )}
+                {!onEdit && !isPantry && i.expiry && (
                   <div style={{ fontSize: 12, marginTop: 2, color: urgent ? C.rust : C.inkSoft }}>
                     {days < 0 ? "expired" : days === 0 ? "expires today" : `expires in ${days}d`}
                   </div>

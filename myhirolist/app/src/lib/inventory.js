@@ -252,6 +252,30 @@ export function moveInventoryItem(items, id, location, staple) {
   ));
 }
 
+/** Edits an inventory row without mutating saved state. A blank name is
+ * rejected because inventory deduplication intentionally drops unnamed rows. */
+export function editInventoryItem(items, id, updates) {
+  if (!Array.isArray(items)) return [];
+  const current = items.find((item) => item?.id === id);
+  if (!current) return items;
+
+  const hasName = Object.prototype.hasOwnProperty.call(updates ?? {}, "name");
+  const hasExpiry = Object.prototype.hasOwnProperty.call(updates ?? {}, "expiry");
+  const nextName = hasName ? String(updates.name ?? "").trim() : current.name;
+  if (!nextName) return items;
+
+  return dedupeInventoryItems(items.map((item) => (
+    item.id === id
+      ? {
+          ...item,
+          ...updates,
+          name: nextName,
+          ...(hasExpiry ? { expiry: updates.expiry || null } : {}),
+        }
+      : item
+  )));
+}
+
 /** Completing a generated low-stock prep job means that homemade staple has
  * been replenished. Unticking the task is deliberately not the same as
  * declaring the kitchen stock low again. */

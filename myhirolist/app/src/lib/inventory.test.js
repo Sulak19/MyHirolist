@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { availableIngredientMatches, clearLowStockForPrep, dedupeInventoryItems, dedupeShoppingItems, ingredientMatchesStock, itemKey, moveInventoryItem, staplesFirst, stockKeysForIngredient, withInventoryStaples } from "./inventory.js";
+import { availableIngredientMatches, clearLowStockForPrep, dedupeInventoryItems, dedupeShoppingItems, editInventoryItem, ingredientMatchesStock, itemKey, moveInventoryItem, staplesFirst, stockKeysForIngredient, withInventoryStaples } from "./inventory.js";
 
 test("item matching ignores case, spacing, punctuation and simple plurals", () => {
   assert.equal(itemKey("  Spring-Onions "), itemKey("spring onion"));
@@ -114,6 +114,32 @@ test("putting away a recent-shop item stores its staple choice", () => {
 
   assert.equal(moved.location, "Fridge");
   assert.equal(moved.staple, true);
+});
+
+test("a Recent shop item's edited name and use-by date survive being put away", () => {
+  const recent = { id: "recent-1", name: "Milk", location: "Recent shop", expiry: null, staple: null };
+
+  const edited = editInventoryItem([recent], recent.id, {
+    name: "Lactose-free milk",
+    expiry: "2026-09-25",
+  });
+  const [moved] = moveInventoryItem(edited, recent.id, "Fridge", false);
+
+  assert.equal(moved.name, "Lactose-free milk");
+  assert.equal(moved.expiry, "2026-09-25");
+  assert.equal(moved.location, "Fridge");
+  assert.equal(moved.staple, false);
+});
+
+test("clearing a use-by date stores null and a blank edited name is rejected", () => {
+  const recent = { id: "recent-1", name: "Milk", location: "Recent shop", expiry: "2026-09-25" };
+
+  const cleared = editInventoryItem([recent], recent.id, { expiry: "" });
+  const rejected = editInventoryItem(cleared, recent.id, { name: "   " });
+
+  assert.equal(cleared[0].expiry, null);
+  assert.equal(rejected, cleared);
+  assert.equal(rejected[0].name, "Milk");
 });
 
 test("completing bread or frozen-rice prep clears its kitchen low marker", () => {
