@@ -1,3 +1,9 @@
+## 1.0.60
+
+Merge pull request #47 from Sulak19/codex/separate-meal-prep-tasks
+
+Support separate meal prep tasks
+
 ## 1.0.59
 
 Merge pull request #46 from Sulak19/codex/edit-recent-shop
