@@ -2046,10 +2046,10 @@ function MealsTab({ list, onChange, shoppingList, onShoppingChange, prepList, on
             </div>
 
             <div style={{ marginTop: 14 }}>
-              <Field label="Prep before cooking (optional)">
+              <Field label="Prep tasks before cooking (optional — one per line)">
                 <textarea
                   style={{ ...styles.input, width: "100%", minHeight: 76, resize: "vertical" }}
-                  placeholder="e.g. Dice onions and marinate chicken."
+                  placeholder={"e.g. Dice onions\nMarinate chicken\nChop vegetables"}
                   value={prepNotes}
                   onChange={(e) => setPrepNotes(e.target.value)}
                 />

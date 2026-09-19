@@ -22,6 +22,7 @@ import {
   addSelectedMealsToPrep,
   isPrepOnlyLowStock,
   removePrepOnlyShoppingItems,
+  mealPrepTasks,
   nonCookingPrepNote,
   prepTasks,
   splitPrepNote,
@@ -783,6 +784,23 @@ test("a meal with its own prep notes keeps them verbatim", () => {
   assert.equal(tasks[0].label, "Marinate overnight in soy and vinegar.");
 });
 
+test("each line in a meal's prep notes becomes a separate task", () => {
+  const meals = [{
+    id: "m",
+    name: "Adobo",
+    ingredients: ["chicken"],
+    prepNotes: "Dice onions\nMarinate chicken\nPortion vegetables",
+  }];
+  const tasks = prepTasks({ Monday: "m" }, {}, meals, []);
+
+  assert.deepEqual(tasks.map((task) => task.label).sort(), [
+    "Dice onions",
+    "Marinate chicken",
+    "Portion vegetables",
+  ]);
+  assert.ok(tasks.every((task) => task.meal === "Adobo"));
+});
+
 test("the same meal on both weeks is prepped once", () => {
   const tasks = prepTasks({ Monday: "hamburg" }, { Monday: "hamburg" }, MEALS, BATCHES);
   assert.equal(tasks.filter((t) => t.label.includes("beef mince")).length, 1);
@@ -983,6 +1001,16 @@ test("a note with no day-of half is left whole", () => {
   const { prep, dayOf } = splitPrepNote("Form patties and freeze flat.");
   assert.equal(prep, "Form patties and freeze flat.");
   assert.equal(dayOf, null);
+});
+
+test("multiline prep ignores blank and day-of lines and strips list markers", () => {
+  assert.deepEqual(
+    mealPrepTasks("- Dice onions\n\n2. Marinate chicken\nDay-of: fry and serve"),
+    [
+      { prep: "Dice onions", dayOf: null },
+      { prep: "Marinate chicken", dayOf: null },
+    ]
+  );
 });
 
 test("cook-ahead instructions are removed from prep", () => {
