@@ -1,3 +1,9 @@
+## 1.0.59
+
+Merge pull request #46 from Sulak19/codex/edit-recent-shop
+
+Make Recent Shop items editable
+
 ## 1.0.58
 
 Merge pull request #45 from Sulak19/codex/seasonal-meal-specials
