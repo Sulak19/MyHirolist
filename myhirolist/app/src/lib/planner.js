@@ -776,8 +776,8 @@ function mergePrepTask(tasks, task) {
 
 function collectMealPrep(tasks, meal, week) {
   if (meal.prepNotes) {
-    const { prep, dayOf } = nonCookingPrepNote(meal.prepNotes);
-    if (prep) {
+    const noteTasks = mealPrepTasks(meal.prepNotes);
+    for (const { prep, dayOf } of noteTasks) {
       mergePrepTask(tasks, {
         key: `meal::${meal.id}::${norm(prep)}`,
         label: prep,
@@ -786,6 +786,8 @@ function collectMealPrep(tasks, meal, week) {
         kind: "meal",
         week,
       });
+    }
+    if (noteTasks.length > 0) {
       return;
     }
     // A note that only described cooking should not leave an empty meal.
@@ -922,6 +924,18 @@ export function nonCookingPrepNote(notes) {
     prep: removedCooking && onlyStorage ? "" : clauses.join("; "),
     dayOf,
   };
+}
+
+/** Turns each non-empty line in a meal's prep notes into its own task.
+ * Existing single-line notes remain a single task. Common pasted list markers
+ * are removed so they do not appear in the Prep checklist. */
+export function mealPrepTasks(notes) {
+  return String(notes ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.trim().replace(/^(?:[-*•]|\d+[.)])\s+/, ""))
+    .filter(Boolean)
+    .map(nonCookingPrepNote)
+    .filter(({ prep }) => Boolean(prep));
 }
 
 /**
