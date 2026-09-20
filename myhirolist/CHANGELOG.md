@@ -1,3 +1,9 @@
+## 1.0.61
+
+Add dog recipe library (#48)
+
+Add all 31 dog-food recipes in a searchable, phone-friendly Dogs > Recipes screen, grouped by creator with complete ingredients, preparation and notes.
+
 ## 1.0.60
 
 Merge pull request #47 from Sulak19/codex/separate-meal-prep-tasks
