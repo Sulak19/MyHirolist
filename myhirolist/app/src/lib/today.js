@@ -37,6 +37,26 @@ export function inventoryUseUpToday(items, now = new Date()) {
     .map(({ item }) => item);
 }
 
+/** Display order for each Kitchen section: urgent use-up items first,
+ * earliest date first; then staples; then everything else. Saved order is
+ * retained within the staple and remainder tiers. */
+export function sortKitchenItems(items, now = new Date()) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map((item, index) => {
+      const days = daysUntilExpiry(item?.expiry, now);
+      const useUpSoon = days !== null && days <= 7;
+      return {
+        item,
+        index,
+        days,
+        tier: useUpSoon ? 0 : item?.staple === true ? 1 : 2,
+      };
+    })
+    .sort((a, b) => a.tier - b.tier || (a.tier === 0 ? a.days - b.days : a.index - b.index))
+    .map(({ item }) => item);
+}
+
 export function completeOddJob(jobs, id) {
   if (!Array.isArray(jobs) || !id) return jobs;
   let changed = false;
