@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { completeOddJob, daysUntilExpiry, inventoryUseUpToday, oddJobsDueToday, shouldShowMealPrepToday } from "./today.js";
+import { completeOddJob, daysUntilExpiry, inventoryUseUpToday, oddJobsDueToday, shouldShowMealPrepToday, sortKitchenItems } from "./today.js";
 
 const atNoon = (year, month, day) => new Date(year, month - 1, day, 12);
 
@@ -71,4 +71,21 @@ test("expiry days use calendar dates and reject invalid dates", () => {
   assert.equal(daysUntilExpiry("2026-09-04", atNoon(2026, 8, 28)), 7);
   assert.equal(daysUntilExpiry("2026-08-27", atNoon(2026, 8, 28)), -1);
   assert.equal(daysUntilExpiry("2026-02-30", atNoon(2026, 8, 28)), null);
+});
+
+test("Kitchen sections show use-up items, then staples, then the rest", () => {
+  const items = [
+    { id: "ordinary-one", staple: false },
+    { id: "staple-one", staple: true },
+    { id: "soon", staple: false, expiry: "2026-09-03" },
+    { id: "overdue", staple: true, expiry: "2026-08-27" },
+    { id: "staple-two", staple: true },
+    { id: "ordinary-two", staple: null },
+  ];
+
+  assert.deepEqual(
+    sortKitchenItems(items, atNoon(2026, 8, 28)).map((item) => item.id),
+    ["overdue", "soon", "staple-one", "staple-two", "ordinary-one", "ordinary-two"]
+  );
+  assert.deepEqual(items.map((item) => item.id), ["ordinary-one", "staple-one", "soon", "overdue", "staple-two", "ordinary-two"]);
 });

@@ -56,8 +56,8 @@ import {
 } from "./lib/dogTreatments.js";
 import { getToday } from "./lib/api.js";
 import { C, useTheme } from "./lib/theme.js";
-import { clearLowStockForPrep, dedupeInventoryItems, dedupeShoppingItems, editInventoryItem, itemKey, moveInventoryItem, staplesFirst, withInventoryStaples } from "./lib/inventory.js";
-import { completeOddJob, daysUntilExpiry, inventoryUseUpToday, oddJobsDueToday, shouldShowMealPrepToday } from "./lib/today.js";
+import { clearLowStockForPrep, dedupeInventoryItems, dedupeShoppingItems, editInventoryItem, itemKey, moveInventoryItem, withInventoryStaples } from "./lib/inventory.js";
+import { completeOddJob, daysUntilExpiry, inventoryUseUpToday, oddJobsDueToday, shouldShowMealPrepToday, sortKitchenItems } from "./lib/today.js";
 import { cleaningTaskStatus, sortCleaningTasks } from "./lib/cleaning.js";
 import { clearPrepItems, visiblePrepItems } from "./lib/prepCompletion.js";
 import { useHousehold } from "./lib/useHousehold.js";
@@ -3756,7 +3756,7 @@ function FridgeTab({ catalogue, list, onChange, shoppingList, onShoppingChange }
 function InventoryGroup({ title, icon: Icon, items, onRemove, onToggleLowStock, onMove, onEdit, onSetStaple }) {
   const isPantry = title === "Pantry" || title === "Supplements";
   const [open, setOpen] = useState(title === RECENT_SHOP);
-  const sortedItems = staplesFirst(items);
+  const sortedItems = sortKitchenItems(items);
   const sectionId = `inventory-${title.toLowerCase().replace(/\s+/g, "-")}`;
   return (
     <div style={{ marginTop: 18 }}>
