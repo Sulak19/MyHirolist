@@ -1,3 +1,9 @@
+## 1.0.63
+
+Merge pull request #50 from Sulak19/codex/order-kitchen-by-expiry
+
+Order Kitchen items by use-up priority
+
 ## 1.0.62
 
 Merge pull request #49 from Sulak19/codex/highlight-expiring-kitchen-items
