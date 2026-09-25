@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { completeOddJob, inventoryUseUpToday, oddJobsDueToday, shouldShowMealPrepToday } from "./today.js";
+import { completeOddJob, daysUntilExpiry, inventoryUseUpToday, oddJobsDueToday, shouldShowMealPrepToday } from "./today.js";
 
 const atNoon = (year, month, day) => new Date(year, month - 1, day, 12);
 
@@ -52,9 +52,9 @@ test("ticking an odd job on Today completes the underlying job", () => {
 
 test("Today marks inventory expiring within seven days as Use up", () => {
   const items = [
+    { id: "boundary", expiry: "2026-09-04" },
     { id: "overdue", expiry: "2026-08-27" },
     { id: "today", expiry: "2026-08-28" },
-    { id: "boundary", expiry: "2026-09-04" },
     { id: "later", expiry: "2026-09-05" },
     { id: "invalid", expiry: "2026-02-30" },
     { id: "undated", expiry: null },
@@ -64,4 +64,11 @@ test("Today marks inventory expiring within seven days as Use up", () => {
     inventoryUseUpToday(items, atNoon(2026, 8, 28)).map((item) => item.id),
     ["overdue", "today", "boundary"]
   );
+});
+
+test("expiry days use calendar dates and reject invalid dates", () => {
+  assert.equal(daysUntilExpiry("2026-08-28", atNoon(2026, 8, 28)), 0);
+  assert.equal(daysUntilExpiry("2026-09-04", atNoon(2026, 8, 28)), 7);
+  assert.equal(daysUntilExpiry("2026-08-27", atNoon(2026, 8, 28)), -1);
+  assert.equal(daysUntilExpiry("2026-02-30", atNoon(2026, 8, 28)), null);
 });
