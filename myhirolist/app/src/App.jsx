@@ -57,7 +57,7 @@ import {
 import { getToday } from "./lib/api.js";
 import { C, useTheme } from "./lib/theme.js";
 import { clearLowStockForPrep, dedupeInventoryItems, dedupeShoppingItems, editInventoryItem, itemKey, moveInventoryItem, staplesFirst, withInventoryStaples } from "./lib/inventory.js";
-import { completeOddJob, inventoryUseUpToday, oddJobsDueToday, shouldShowMealPrepToday } from "./lib/today.js";
+import { completeOddJob, daysUntilExpiry, inventoryUseUpToday, oddJobsDueToday, shouldShowMealPrepToday } from "./lib/today.js";
 import { cleaningTaskStatus, sortCleaningTasks } from "./lib/cleaning.js";
 import { clearPrepItems, visiblePrepItems } from "./lib/prepCompletion.js";
 import { useHousehold } from "./lib/useHousehold.js";
@@ -860,10 +860,14 @@ function DayCards({ data, onCleaningChange, onOddJobsChange, onDogTreatmentGiven
             )}
 
             {day.expiry.length > 0 && (
-              <div style={{ marginTop: 12 }}>
-                <div style={{ ...styles.dayKicker, color: C.rust }}>Use up</div>
-                <div style={{ ...styles.dayList, color: C.rust }}>{day.expiry.map((e) => e.name).join(" · ")}</div>
-              </div>
+              <button type="button" onClick={() => setTab("fridge")} style={styles.homeExpiryShortcut}>
+                <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <AlertTriangle size={15} />
+                  <strong>Use up soon</strong>
+                </span>
+                <span style={{ marginTop: 4, lineHeight: 1.45 }}>{day.expiry.map((e) => e.name).join(" · ")}</span>
+                <span style={{ marginTop: 5, fontSize: 11.5, fontWeight: 600 }}>View in Kitchen →</span>
+              </button>
             )}
 
             {other.length > 0 && (
@@ -890,11 +894,7 @@ function HomeTab({ data, setTab, onCleaningChange, onOddJobsChange, onDogTreatme
   const dogExtrasLow = data.dogFood.extras.some((e) => e.lowStock);
   const supply = foodSupply(data.dogFood);
   const minDaysLeft = supply.days;
-  const expiringSoon = data.inventory.filter((i) => {
-    if (!i.expiry) return false;
-    const days = (new Date(i.expiry) - new Date()) / 86400000;
-    return days <= 3;
-  });
+  const expiringSoon = inventoryUseUpToday(data.inventory);
   const pantryLow = data.inventory.filter((i) => i.location === "Pantry" && i.lowStock);
   const supplementsLow = data.inventory.filter((i) => i.location === "Supplements" && i.lowStock);
   const uncheckedShopping = data.shopping.filter((s) => !s.checked).length;
@@ -934,6 +934,13 @@ function HomeTab({ data, setTab, onCleaningChange, onOddJobsChange, onDogTreatme
 
       <div style={styles.grid2}>
         <SummaryCard
+          icon={AlertTriangle}
+          label="Use up soon"
+          value={expiringSoon.length === 0 ? "Nothing urgent" : `${expiringSoon.length} item${expiringSoon.length === 1 ? "" : "s"}`}
+          alert={expiringSoon.length > 0}
+          onClick={() => setTab("fridge")}
+        />
+        <SummaryCard
           icon={ShoppingCart}
           label="Shopping list"
           value={uncheckedShopping === 0 ? "All clear" : `${uncheckedShopping} item${uncheckedShopping === 1 ? "" : "s"}`}
@@ -959,13 +966,6 @@ function HomeTab({ data, setTab, onCleaningChange, onOddJobsChange, onDogTreatme
           value={dueTreatments.length === 0 ? "Up to date" : `${dueTreatments.length} due`}
           alert={dueTreatments.length > 0}
           onClick={() => setTab("dogTreatments")}
-        />
-        <SummaryCard
-          icon={Refrigerator}
-          label="Expiring soon"
-          value={expiringSoon.length === 0 ? "Nothing urgent" : `${expiringSoon.length} item${expiringSoon.length === 1 ? "" : "s"}`}
-          alert={expiringSoon.length > 0}
-          onClick={() => setTab("fridge")}
         />
         <SummaryCard
           icon={Package}
@@ -3445,6 +3445,15 @@ function IngredientCatalogue({ catalogue, onSave }) {
   </details>;
 }
 
+function expiryMessage(expiry, now = new Date()) {
+  const days = daysUntilExpiry(expiry, now);
+  if (days === null) return null;
+  if (days < 0) return `${Math.abs(days)} day${days === -1 ? "" : "s"} overdue`;
+  if (days === 0) return "Use today";
+  if (days === 1) return "1 day left";
+  return `${days} days left`;
+}
+
 function FridgeTab({ catalogue, list, onChange, shoppingList, onShoppingChange }) {
   const [name, setName] = useState("");
   const [loc, setLoc] = useState("Fridge");
@@ -3495,6 +3504,7 @@ function FridgeTab({ catalogue, list, onChange, shoppingList, onShoppingChange }
   const freezer = list.filter((i) => i.location === "Freezer");
   const pantry = list.filter((i) => i.location === "Pantry");
   const supplements = list.filter((i) => i.location === "Supplements");
+  const expiringSoon = inventoryUseUpToday(list);
 
   const triggerScan = () => fileInputRef.current?.click();
 
@@ -3553,6 +3563,29 @@ function FridgeTab({ catalogue, list, onChange, shoppingList, onShoppingChange }
   return (
     <div>
       <SectionTitle>Fridge, freezer & pantry</SectionTitle>
+
+      {expiringSoon.length > 0 && (
+        <section aria-labelledby="kitchen-use-up-title" style={styles.kitchenExpiryPanel}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+            <div id="kitchen-use-up-title" style={{ display: "flex", alignItems: "center", gap: 7, color: C.rust, fontWeight: 700 }}>
+              <AlertTriangle size={17} /> Use up soon
+            </div>
+            <span style={styles.expiryCount}>{expiringSoon.length}</span>
+          </div>
+          <div style={{ fontSize: 12, color: C.inkSoft, marginTop: 4 }}>Expired or due within the next 7 days, soonest first.</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: 10 }}>
+            {expiringSoon.map((item) => (
+              <div key={item.id} style={styles.expiryItem}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 700, fontSize: 15 }}>{item.name}</div>
+                  <div style={{ color: C.inkSoft, fontSize: 11.5, marginTop: 1 }}>{item.location || "Kitchen"} · use by {item.expiry}</div>
+                </div>
+                <span style={styles.expiryBadge}>{expiryMessage(item.expiry)}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <input
         ref={fileInputRef}
@@ -3757,14 +3790,15 @@ function InventoryGroup({ title, icon: Icon, items, onRemove, onToggleLowStock, 
       </button>
       {open && <div id={sectionId} style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
         {sortedItems.map((i) => {
-          const days = i.expiry ? Math.ceil((new Date(i.expiry) - new Date()) / 86400000) : null;
-          const urgent = (days !== null && days <= 3) || i.lowStock;
+          const days = daysUntilExpiry(i.expiry);
+          const expiring = days !== null && days <= 7;
+          const urgent = expiring || i.lowStock;
           return (
             <div
               key={i.id}
               style={{
                 ...styles.row,
-                background: i.staple === true ? C.stapleTint : i.staple === false ? C.nonStapleTint : C.card,
+                background: expiring ? C.rustWash : i.staple === true ? C.stapleTint : i.staple === false ? C.nonStapleTint : C.card,
                 borderColor: urgent ? C.rust : C.line,
               }}
             >
@@ -3803,8 +3837,8 @@ function InventoryGroup({ title, icon: Icon, items, onRemove, onToggleLowStock, 
                   </label>
                 )}
                 {!onEdit && !isPantry && i.expiry && (
-                  <div style={{ fontSize: 12, marginTop: 2, color: urgent ? C.rust : C.inkSoft }}>
-                    {days < 0 ? "expired" : days === 0 ? "expires today" : `expires in ${days}d`}
+                  <div style={{ fontSize: 12, marginTop: 2, color: expiring ? C.rust : C.inkSoft, fontWeight: expiring ? 700 : 400 }}>
+                    {expiryMessage(i.expiry)} · {i.expiry}
                   </div>
                 )}
                 <select
@@ -4639,6 +4673,45 @@ const buildStyles = () => ({
     gap: 8,
     width: "100%",
   },
+  kitchenExpiryPanel: {
+    marginBottom: 14,
+    padding: 12,
+    border: `1.5px solid ${C.rust}`,
+    borderRadius: 10,
+    background: C.rustWash,
+  },
+  expiryCount: {
+    minWidth: 25,
+    height: 25,
+    padding: "0 7px",
+    borderRadius: 999,
+    background: C.rust,
+    color: C.paper,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 12,
+    fontWeight: 700,
+  },
+  expiryItem: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+    padding: "9px 10px",
+    border: `1px solid ${C.rust}`,
+    borderRadius: 8,
+    background: C.card,
+  },
+  expiryBadge: {
+    flexShrink: 0,
+    padding: "4px 7px",
+    borderRadius: 999,
+    background: C.rustWash,
+    color: C.rust,
+    fontSize: 11,
+    fontWeight: 700,
+  },
   row: {
     display: "flex",
     justifyContent: "space-between",
@@ -4673,6 +4746,22 @@ const buildStyles = () => ({
   dayMuted: { fontSize: 13.5, color: C.inkFaint, fontStyle: "italic", marginTop: 2 },
   dayList: { fontSize: 13.5, marginTop: 3, lineHeight: 1.5 },
   dayTime: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: C.sage },
+  homeExpiryShortcut: {
+    width: "100%",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-start",
+    marginTop: 12,
+    padding: "10px 11px",
+    border: `1.5px solid ${C.rust}`,
+    borderRadius: 9,
+    background: C.rustWash,
+    color: C.rust,
+    textAlign: "left",
+    fontFamily: "'Inter', sans-serif",
+    fontSize: 13,
+    cursor: "pointer",
+  },
   choreWrap: { display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 },
   choreChip: {
     display: "inline-flex",

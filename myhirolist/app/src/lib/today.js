@@ -13,21 +13,28 @@ export function oddJobsDueToday(jobs, now = new Date()) {
   return jobs.filter((job) => !job?.done && /^\d{4}-\d{2}-\d{2}$/.test(job?.dueDate) && job.dueDate <= today);
 }
 
+export function daysUntilExpiry(expiry, now = new Date()) {
+  if (!(now instanceof Date) || Number.isNaN(now.getTime())) return null;
+  const value = String(expiry ?? "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+
+  const [year, month, day] = value.split("-").map(Number);
+  const parsed = new Date(year, month - 1, day);
+  const valid = parsed.getFullYear() === year && parsed.getMonth() === month - 1 && parsed.getDate() === day;
+  if (!valid) return null;
+
+  const todayUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  const expiryUtc = Date.UTC(year, month - 1, day);
+  return Math.round((expiryUtc - todayUtc) / 86400000);
+}
+
 export function inventoryUseUpToday(items, now = new Date()) {
   if (!Array.isArray(items) || !(now instanceof Date) || Number.isNaN(now.getTime())) return [];
-  const asKey = (date) =>
-    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-  const limit = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7);
-  const limitKey = asKey(limit);
-
-  return items.filter((item) => {
-    const expiry = String(item?.expiry ?? "");
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(expiry)) return false;
-    const [year, month, day] = expiry.split("-").map(Number);
-    const parsed = new Date(year, month - 1, day);
-    const valid = parsed.getFullYear() === year && parsed.getMonth() === month - 1 && parsed.getDate() === day;
-    return valid && expiry <= limitKey;
-  });
+  return items
+    .map((item, index) => ({ item, index, days: daysUntilExpiry(item?.expiry, now) }))
+    .filter(({ days }) => days !== null && days <= 7)
+    .sort((a, b) => a.days - b.days || a.index - b.index)
+    .map(({ item }) => item);
 }
 
 export function completeOddJob(jobs, id) {
