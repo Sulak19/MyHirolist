@@ -3580,7 +3580,17 @@ function FridgeTab({ catalogue, list, onChange, shoppingList, onShoppingChange }
                   <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 700, fontSize: 15 }}>{item.name}</div>
                   <div style={{ color: C.inkSoft, fontSize: 11.5, marginTop: 1 }}>{item.location || "Kitchen"} · use by {item.expiry}</div>
                 </div>
-                <span style={styles.expiryBadge}>{expiryMessage(item.expiry)}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+                  <span style={styles.expiryBadge}>{expiryMessage(item.expiry)}</span>
+                  <button
+                    type="button"
+                    aria-label={`Delete ${item.name} from Kitchen`}
+                    style={{ ...styles.xBtn, color: C.rust }}
+                    onClick={() => remove(item.id)}
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
