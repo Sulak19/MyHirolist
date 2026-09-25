@@ -1,3 +1,9 @@
+## 1.0.62
+
+Merge pull request #49 from Sulak19/codex/highlight-expiring-kitchen-items
+
+Make expiring Kitchen items easier to find
+
 ## 1.0.61
 
 Add dog recipe library (#48)
