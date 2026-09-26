@@ -1,3 +1,9 @@
+## 1.0.64
+
+Merge pull request #51 from Sulak19/codex/delete-use-up-items
+
+Allow deleting items from Use up soon
+
 ## 1.0.63
 
 Merge pull request #50 from Sulak19/codex/order-kitchen-by-expiry
