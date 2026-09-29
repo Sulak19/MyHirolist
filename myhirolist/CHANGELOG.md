@@ -1,3 +1,9 @@
+## 1.0.65
+
+Merge pull request #52 from Sulak19/codex/dog-treatment-history-safety-pdf
+
+Improve dog treatment history controls and PDF export
+
 ## 1.0.64
 
 Merge pull request #51 from Sulak19/codex/delete-use-up-items
