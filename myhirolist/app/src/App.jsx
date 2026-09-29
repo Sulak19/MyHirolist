@@ -20,6 +20,7 @@ import {
   Pill,
   BookOpen,
   Boxes,
+  Download,
 } from "lucide-react";
 import { scanImageWithClaude, listSnapshots, restoreSnapshot } from "./lib/api.js";
 import { useScanAvailable } from "./lib/useCapabilities.js";
@@ -67,6 +68,7 @@ import { planDates, addDays, planForDate } from "./lib/weeks.js";
 import { migrateDogFood, foodSupply, renameDogs } from "./lib/dogFood.js";
 import { DogFoodToday, SharedDogFoods } from "./DogFood.jsx";
 import { DogRecipes } from "./DogRecipes.jsx";
+import { downloadTreatmentHistoryPdf } from "./lib/treatmentPdf.js";
 
 /* ---------------------------------------------------------
    Home Base — a household dashboard
@@ -3302,15 +3304,11 @@ function DogTreatmentsTab({ dogFood, treatments, onDogFoodChange, onScheduleChan
           </span>
           {history.length > 0 && (
             <button
-              style={styles.linkBtnSmall}
-              onClick={() => {
-                if (window.confirm("Clear all dog treatment history? Products, schedules, due dates and stock will stay unchanged.")) {
-                  onClearHistory();
-                  setOpenHistoryDogId(null);
-                }
-              }}
+              type="button"
+              style={{ ...styles.putAwayBtn, display: "inline-flex", alignItems: "center", gap: 5, flexShrink: 0 }}
+              onClick={() => downloadTreatmentHistoryPdf(dogs, history)}
             >
-              Clear history
+              <Download size={13} /> Download PDF
             </button>
           )}
         </div>
@@ -3382,6 +3380,32 @@ function DogTreatmentsTab({ dogFood, treatments, onDogFoodChange, onScheduleChan
           );
         })}
       </div>
+
+      {history.length > 0 && (
+        <details style={{ marginTop: 24 }}>
+          <summary style={{ color: C.inkFaint, fontSize: 12, cursor: "pointer", width: "fit-content" }}>
+            History options
+          </summary>
+          <div style={{ ...styles.card, marginTop: 8, borderColor: C.rust, background: C.rustWash }}>
+            <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600 }}>Clear all treatment history</div>
+            <div style={{ fontSize: 12, color: C.inkSoft, lineHeight: 1.5, marginTop: 3 }}>
+              This removes every recorded treatment for both dogs. Products, schedules, due dates and stock stay unchanged.
+            </div>
+            <button
+              type="button"
+              style={{ ...styles.putAwayBtn, color: C.rust, borderColor: C.rust, marginTop: 10 }}
+              onClick={() => {
+                if (window.confirm("Clear all dog treatment history? Products, schedules, due dates and stock will stay unchanged.")) {
+                  onClearHistory();
+                  setOpenHistoryDogId(null);
+                }
+              }}
+            >
+              Clear all history
+            </button>
+          </div>
+        </details>
+      )}
     </div>
   );
 }
