@@ -35,15 +35,6 @@ function FeedingEditor({data,date,onChange,onClose}) {
     <button style={button} type="submit">{existing ? 'Save changes' : individual ? '✓ Record individual feeds' : '✓ Fed both'}</button>{onClose && <button type="button" style={button} onClick={onClose}>Cancel</button>}
   </form>;
 }
-export function DogFoodToday({data,onChange}) {
-  const [editing,setEditing]=useState(false);
-  const date=localFoodDate();
-  const record=data.feedingHistory?.find(r=>r.date===date);
-  if(data.foodVersion!==2) return null;
-  return <section style={box}><strong>Dogs’ food today</strong>
-    {record && !editing ? <><p>Recorded today</p>{record.entries.map(e=><p key={e.dogId}>{dogNameForEntry(data,e)} · {e.foodName} · {e.amountG}g</p>)}<button style={button} onClick={()=>setEditing(true)}>Edit</button><button style={button} onClick={()=>onChange(undoFeed(data,date))}>Undo feeding</button></> : <FeedingEditor key={date+String(!!record)} data={data} date={date} onChange={onChange} onClose={editing?()=>setEditing(false):undefined}/>}
-  </section>;
-}
 function FoodForm({data,food,onSave,onCancel}) {
   const [draft,setDraft]=useState(food||{id:crypto.randomUUID(),name:'',type:'Raw',packSizeG:1000,servings:{}});
   const [same,setSame]=useState(!food || new Set(Object.values(food.servings||{})).size<=1);
