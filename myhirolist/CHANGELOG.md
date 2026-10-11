@@ -1,3 +1,9 @@
+## 1.0.66
+
+Merge pull request #53 from Sulak19/codex/remove-home-dog-feeding-tracker
+
+Remove dog feeding tracker from Home
+
 ## 1.0.65
 
 Merge pull request #52 from Sulak19/codex/dog-treatment-history-safety-pdf
