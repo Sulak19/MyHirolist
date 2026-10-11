@@ -66,7 +66,7 @@ import { sameValue, undoChange } from "./lib/changes.js";
 import { applyCatalogue, findIngredient, saveIngredient, catalogueError } from "./lib/catalogue.js";
 import { planDates, addDays, planForDate } from "./lib/weeks.js";
 import { migrateDogFood, foodSupply, renameDogs } from "./lib/dogFood.js";
-import { DogFoodToday, SharedDogFoods } from "./DogFood.jsx";
+import { SharedDogFoods } from "./DogFood.jsx";
 import { DogRecipes } from "./DogRecipes.jsx";
 import { downloadTreatmentHistoryPdf } from "./lib/treatmentPdf.js";
 
@@ -508,7 +508,6 @@ export default function HomeBase() {
             onDogTreatmentGiven={(scheduleId) =>
               setData((current) => recordDogTreatment(current, scheduleId, treatmentDateKey(), uid))
             }
-            onDogFoodChange={(value) => update("dogFood", value)}
           />
         )}
         {tab === "plan" && (
@@ -892,7 +891,7 @@ function DayCards({ data, onCleaningChange, onOddJobsChange, onDogTreatmentGiven
   );
 }
 
-function HomeTab({ data, setTab, onCleaningChange, onOddJobsChange, onDogTreatmentGiven, onDogFoodChange }) {
+function HomeTab({ data, setTab, onCleaningChange, onOddJobsChange, onDogTreatmentGiven }) {
   const dogExtrasLow = data.dogFood.extras.some((e) => e.lowStock);
   const supply = foodSupply(data.dogFood);
   const minDaysLeft = supply.days;
@@ -932,8 +931,6 @@ function HomeTab({ data, setTab, onCleaningChange, onOddJobsChange, onDogTreatme
         onDogTreatmentGiven={onDogTreatmentGiven}
         setTab={setTab}
       />
-      <DogFoodToday data={data.dogFood} onChange={onDogFoodChange} />
-
       <div style={styles.grid2}>
         <SummaryCard
           icon={AlertTriangle}
