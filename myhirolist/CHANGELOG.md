@@ -1,3 +1,9 @@
+## 1.0.67
+
+Merge pull request #54 from Sulak19/codex/direct-dog-food-counts
+
+Replace dog feeding history with direct stock controls
+
 ## 1.0.66
 
 Merge pull request #53 from Sulak19/codex/remove-home-dog-feeding-tracker
