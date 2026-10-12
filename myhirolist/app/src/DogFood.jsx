@@ -1,39 +1,37 @@
-import React, { useRef, useState } from 'react';
-import { localFoodDate, migrationSuggestions, activateFoods, dogNameForEntry, remainingG, remainingPackets, openingGramsForPackets, feedDogs, undoFeed, foodSupply, foodCoverage } from './lib/dogFood.js';
+import React, { useEffect, useState } from 'react';
+import { migrationSuggestions, activateFoods, remainingG, remainingPackets, openingGramsForPackets, setRemainingPackets, foodSupply, foodCoverage } from './lib/dogFood.js';
 
 const box = { border:'1px solid var(--line, #aaa)', borderRadius:10, padding:12, marginBottom:12, minWidth:0 };
 const input = { width:'100%', minWidth:0, boxSizing:'border-box', padding:8, margin:'4px 0 10px' };
 const button = { padding:'9px 12px', margin:'4px 8px 4px 0', cursor:'pointer' };
 function Field({label,children}) { return <label style={{display:'block',minWidth:0}}>{label}{children}</label>; }
-function packetLabel(value) {
-  if (value === null) return 'Set packet size';
-  const rounded=Math.round(value*100)/100;
-  return `${rounded} packet${rounded===1?'':'s'}`;
-}
 export function Supply({data}) {
   const s=foodSupply(data);
   return <p>{s.days===null ? 'Review shared stock to calculate food remaining.' : `${s.incomplete ? 'At least' : 'Approximately'} ${s.days} days of food for ${data.dogs.length} dogs.${s.incomplete ? ' Estimate incomplete: set missing servings.' : ''}`}</p>;
 }
-function FeedingEditor({data,date,onChange,onClose}) {
-  const existing=data.feedingHistory?.find(r=>r.date===date);
-  const [individual,setIndividual]=useState(!!existing);
-  const [foodId,setFoodId]=useState('');
-  const [choices,setChoices]=useState(Object.fromEntries((existing?.entries||[]).map(e=>[e.dogId,{foodId:e.foodId,amountG:e.amountG}])));
-  const [error,setError]=useState('');
-  const submitting=useRef(false);
-  const foods=data.foods.filter(f=>remainingG(data,f.id)>0 || existing?.entries.some(e=>e.foodId===f.id));
-  const choose=(id)=> { setFoodId(id); const f=data.foods.find(f=>f.id===id); setChoices(Object.fromEntries(data.dogs.map(d=>[d.id,{foodId:id,amountG:f?.servings?.[d.id]||''}]))); };
-  return <form onSubmit={e=>{e.preventDefault();if(submitting.current)return;try {const next=feedDogs(data,choices,date,!!existing);submitting.current=true;onChange(next);onClose?.();setError('');}catch(err){submitting.current=false;setError(err.message);}}}>
-    <p>{existing ? 'Edit daily feeding' : 'Record daily feeding'} · {date}</p>
-    {!individual && <Field label="Choose food · Both dogs"><select required aria-label="Choose food for both dogs" style={input} value={foodId} onChange={e=>choose(e.target.value)}><option value="">Choose food</option>{foods.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select></Field>}
-    <label><input type="checkbox" checked={individual} onChange={e=>setIndividual(e.target.checked)}/> Edit individually</label>
-    {data.dogs.map(d=><div key={d.id} style={{marginTop:8}}><strong>{d.name}</strong>
-      {individual && <select required aria-label={`${d.name} food`} style={input} value={choices[d.id]?.foodId||''} onChange={e=>{const f=data.foods.find(f=>f.id===e.target.value);setChoices({...choices,[d.id]:{foodId:f.id,amountG:f.servings?.[d.id]||''}});}}><option value="">Choose food</option>{foods.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select>}
-      <Field label="Daily amount (g)"><input required type="number" min="1" step="any" style={input} value={choices[d.id]?.amountG??''} onChange={e=>setChoices({...choices,[d.id]:{...choices[d.id],amountG:e.target.value}})}/></Field>
-    </div>)}
-    {error && <p role="alert">{error}</p>}
-    <button style={button} type="submit">{existing ? 'Save changes' : individual ? '✓ Record individual feeds' : '✓ Fed both'}</button>{onClose && <button type="button" style={button} onClick={onClose}>Cancel</button>}
-  </form>;
+function PacketCount({data,food,onChange}) {
+  const count=remainingPackets(data,food.id)??0;
+  const displayed=String(Math.round(count*100)/100);
+  const [value,setValue]=useState(displayed);
+  useEffect(()=>setValue(displayed),[displayed]);
+  const commit=(nextValue)=>{
+    const next=Number(nextValue);
+    if(!Number.isFinite(next)||next<0){setValue(displayed);return;}
+    onChange(setRemainingPackets(data,food.id,next));
+  };
+  const adjust=(change)=>{
+    const typed=Number(value);
+    const start=Number.isFinite(typed)&&typed>=0?typed:count;
+    const next=Math.max(0,Math.round((start+change)*100)/100);
+    setValue(String(next));
+    commit(next);
+  };
+  return <div style={{display:'flex',alignItems:'center',gap:8,margin:'12px 0'}}>
+    <button type="button" aria-label={`Remove one packet of ${food.name}`} style={{...button,margin:0,fontSize:20,minWidth:44}} disabled={count<=0} onClick={()=>adjust(-1)}>−</button>
+    <input aria-label={`${food.name} packet count`} type="number" min="0" step="0.25" inputMode="decimal" value={value} onChange={e=>setValue(e.target.value)} onBlur={e=>commit(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')e.currentTarget.blur();}} style={{...input,width:86,textAlign:'center',margin:0}}/>
+    <button type="button" aria-label={`Add one packet of ${food.name}`} style={{...button,margin:0,fontSize:20,minWidth:44}} onClick={()=>adjust(1)}>＋</button>
+    <span>packets</span>
+  </div>;
 }
 function FoodForm({data,food,onSave,onCancel}) {
   const [draft,setDraft]=useState(food||{id:crypto.randomUUID(),name:'',type:'Raw',packSizeG:1000,servings:{}});
@@ -58,8 +56,6 @@ function FoodForm({data,food,onSave,onCancel}) {
 }
 export function SharedDogFoods({data,onChange}) {
   const [draft,setDraft]=useState(null);
-  const [date,setDate]=useState(localFoodDate());
-  const [recording,setRecording]=useState(false);
   const [suggestions,setSuggestions]=useState(()=>migrationSuggestions(data));
   const [confirmed,setConfirmed]=useState(false);
   const [error,setError]=useState('');
@@ -71,10 +67,6 @@ export function SharedDogFoods({data,onChange}) {
   </section>;
   return <section><button style={button} onClick={()=>setDraft({})}>＋ Add food</button><Supply data={data}/>
     {draft&&<FoodForm key={draft.id||'new'} data={data} food={draft.id?draft:null} onCancel={()=>setDraft(null)} onSave={f=>{onChange({...data,foods:[...data.foods.filter(x=>x.id!==f.id),f]});setDraft(null);}}/>}
-    {data.foods.map(f=><details key={f.id} style={box}><summary>{f.name} · {packetLabel(remainingPackets(data,f.id))} · {foodCoverage(data,f)===null?'Set servings':`~${foodCoverage(data,f).toFixed(1)} days`}</summary><button style={button} onClick={()=>setDraft(f)}>Edit food / update packet count</button></details>)}
-    <details style={box}><summary>Feeding history</summary><Field label="Record or edit a date"><input type="date" max={localFoodDate()} style={input} value={date} onChange={e=>{setDate(e.target.value);setRecording(false);}}/></Field><button style={button} disabled={!date} onClick={()=>setRecording(true)}>Record / edit feeding</button>
-      {recording&&<FeedingEditor key={date} data={data} date={date} onChange={onChange} onClose={()=>setRecording(false)}/>}
-      {[...(data.feedingHistory||[])].sort((a,b)=>b.date.localeCompare(a.date)).map(r=><div style={box} key={r.id}><strong>{r.date}</strong>{r.entries.map(e=><p key={e.dogId}>{dogNameForEntry(data,e)} · {e.foodName} · {e.amountG}g</p>)}<button style={button} onClick={()=>{setDate(r.date);setRecording(true);}}>Edit</button><button style={button} onClick={()=>onChange(undoFeed(data,r.date))}>Undo feeding</button></div>)}
-    </details>
+    {data.foods.map(f=><div key={f.id} style={box}><strong>{f.name}</strong><div>{foodCoverage(data,f)===null?'Set daily servings to calculate coverage':`About ${foodCoverage(data,f).toFixed(1)} days left`}</div><PacketCount data={data} food={f} onChange={onChange}/><button style={button} onClick={()=>setDraft(f)}>Edit food details</button></div>)}
   </section>;
 }

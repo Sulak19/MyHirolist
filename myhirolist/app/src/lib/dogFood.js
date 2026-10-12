@@ -55,6 +55,18 @@ export function openingGramsForPackets(packetCount, packetSizeG, alreadyUsedG = 
   if (packets < 0 || !(size > 0) || used < 0) throw Error("Enter a valid packet count and packet size.");
   return packets * size + used;
 }
+export function setRemainingPackets(source, foodId, packetCount) {
+  const food = source.foods?.find(item => item.id === foodId);
+  if (!food) throw Error("Choose a valid dog food.");
+  const used = num(food.stockG) - remainingG(source, foodId);
+  const stockG = openingGramsForPackets(packetCount, food.packSizeG, used);
+  const result = {
+    ...source,
+    foods: source.foods.map(item => item.id === foodId ? { ...item, stockG } : item),
+  };
+  validateDogFood(result);
+  return result;
+}
 export function validateDogFood(source) {
   if (source?.foodVersion !== 2) return;
   const ids = new Set();

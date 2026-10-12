@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { migrateDogFood, migrationSuggestions, activateFoods, renameDogs, dogNameForEntry, remainingG, remainingPackets, openingGramsForPackets, feedDogs, undoFeed, foodSupply, validateDogFood, localFoodDate } from './dogFood.js';
+import { migrateDogFood, migrationSuggestions, activateFoods, renameDogs, dogNameForEntry, remainingG, remainingPackets, openingGramsForPackets, setRemainingPackets, feedDogs, undoFeed, foodSupply, validateDogFood, localFoodDate } from './dogFood.js';
 import { mergeChanges, undoChange } from './changes.js';
 const date='2026-09-10';
 const base=()=>({foodVersion:2,dogs:[{id:'a',name:'A'},{id:'b',name:'B'}],foods:[{id:'f',name:'Food',stockG:1000,servings:{a:250,b:250}}],feedingHistory:[]});
@@ -70,4 +70,14 @@ test('freezer stock is counted in packets while feeding retains partial packets'
  assert.equal(remainingPackets(fed,'f'),1);
  assert.equal(openingGramsForPackets(3.5,500,250),2000);
  assert.throws(()=>openingGramsForPackets(-1,500,0),/valid packet count/);
+});
+test('packet count can be set directly without deleting earlier feeding records',()=>{
+ const data=base();data.foods[0].packSizeG=500;
+ const fed=feedDogs(data,selection,date);
+ const updated=setRemainingPackets(fed,'f',3.5);
+ assert.equal(remainingPackets(updated,'f'),3.5);
+ assert.deepEqual(updated.feedingHistory,fed.feedingHistory);
+ assert.equal(updated.foods[0].stockG,2250);
+ assert.throws(()=>setRemainingPackets(updated,'f',-1),/valid packet count/);
+ assert.throws(()=>setRemainingPackets(updated,'missing',1),/valid dog food/);
 });
