@@ -69,6 +69,7 @@ import { migrateDogFood, foodSupply, renameDogs } from "./lib/dogFood.js";
 import { SharedDogFoods } from "./DogFood.jsx";
 import { DogRecipes } from "./DogRecipes.jsx";
 import { downloadTreatmentHistoryPdf } from "./lib/treatmentPdf.js";
+import { oneOffMealFromId, oneOffMealId, oneOffMealName } from "./lib/oneOffMeal.js";
 
 /* ---------------------------------------------------------
    Home Base — a household dashboard
@@ -732,7 +733,7 @@ function agendaFromData(data) {
   const weekday = DAY_LABELS[now.getDay()];
   const mealId = planForDate(data, now)?.[weekday];
   const meal = mealId
-    ? data.mealPrep.find((m) => m.id === mealId) || proteinMealIdeaFromId(mealId, data.inventory)
+    ? data.mealPrep.find((m) => m.id === mealId) || proteinMealIdeaFromId(mealId, data.inventory) || oneOffMealFromId(mealId)
     : null;
   return {
     available: false,
@@ -909,7 +910,7 @@ function HomeTab({ data, setTab, onCleaningChange, onOddJobsChange, onDogTreatme
   const isPrepDay = ["Friday", "Saturday", "Sunday"].includes(todayName);
   const todaysMealId = isWeekday ? data.weekPlan?.[todayName] : null;
   const todaysMeal = todaysMealId
-    ? data.mealPrep.find((m) => m.id === todaysMealId) || proteinMealIdeaFromId(todaysMealId, data.inventory)
+    ? data.mealPrep.find((m) => m.id === todaysMealId) || proteinMealIdeaFromId(todaysMealId, data.inventory) || oneOffMealFromId(todaysMealId)
     : null;
 
   const dueTasks = data.cleaning.filter((c) => isDue(c));
@@ -1120,6 +1121,18 @@ function TapSelect({ value, valueLabel, options, searchOptions = options, onChan
   );
 }
 
+function OneOffMealInput({ day, currentValue, onSave }) {
+  const [name, setName] = useState(oneOffMealName(currentValue) ?? "");
+  const trimmed = name.trim();
+  return <form onSubmit={(event) => {
+    event.preventDefault();
+    if (trimmed) onSave(oneOffMealId(trimmed));
+  }} style={{ display: "flex", gap: 8, marginTop: 8 }}>
+    <input aria-label={`Type ${day}'s meal`} value={name} onChange={(event) => setName(event.target.value)} placeholder="Or type a one-off meal" style={{ ...styles.input, minWidth: 0, flex: 1 }} />
+    <button type="submit" disabled={!trimmed || oneOffMealId(trimmed) === currentValue} style={styles.addSpendBtn}>Save</button>
+  </form>;
+}
+
 function PlanTab({ planWeekOf, previousWeekPlan, meals, selectedMealIds, plan, onPlanChange, planAuto, planWeek: activeWeek, onPlanWeekChange, otherWeekPlan, thisWeekPlan, nextWeekPlan, mealHistory, shoppingList, onShoppingChange, dismissedShopping, onDismissedShoppingChange, prepList, onPrepChange, batchList, inventory }) {
   const dates = planDates(planWeekOf, activeWeek === "next");
   const displayDate = (key) => new Date(`${key}T12:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
@@ -1242,10 +1255,10 @@ function PlanTab({ planWeekOf, previousWeekPlan, meals, selectedMealIds, plan, o
       const batch = batchList.find((b) => b.id === batchId);
       return { day, meal: null, batch: batch || null };
     }
-    const meal = meals.find((m) => m.id === id) || proteinMealIdeaFromId(id, inventory);
+    const meal = meals.find((m) => m.id === id) || proteinMealIdeaFromId(id, inventory) || oneOffMealFromId(id);
     return { day, meal, batch: null };
   });
-  const plannedMeals = [...new Map(dayAssignments.filter((assignment) => assignment.meal).map((assignment) => [assignment.meal.id, assignment.meal])).values()];
+  const plannedMeals = [...new Map(dayAssignments.filter((assignment) => assignment.meal && !oneOffMealName(assignment.meal.id)).map((assignment) => [assignment.meal.id, assignment.meal])).values()];
 
   const addPlanToShopping = () => {
     const synced = reconcileMealPlanLists({
@@ -1391,7 +1404,7 @@ function PlanTab({ planWeekOf, previousWeekPlan, meals, selectedMealIds, plan, o
       </p>
       {previousWeekPlan?.weekOf && <details style={styles.card}>
         <summary>Previous plan · {displayDate(previousWeekPlan.weekOf)}</summary>
-        {WEEKDAYS.map((day) => <p key={day}>{day}: {meals.find((m) => m.id === previousWeekPlan.plan?.[day])?.name || proteinMealIdeaFromId(previousWeekPlan.plan?.[day], inventory)?.name || batchList.find((b) => `batch:${b.id}` === previousWeekPlan.plan?.[day])?.name || "Nothing planned"}</p>)}
+        {WEEKDAYS.map((day) => <p key={day}>{day}: {meals.find((m) => m.id === previousWeekPlan.plan?.[day])?.name || proteinMealIdeaFromId(previousWeekPlan.plan?.[day], inventory)?.name || oneOffMealName(previousWeekPlan.plan?.[day]) || batchList.find((b) => `batch:${b.id}` === previousWeekPlan.plan?.[day])?.name || "Nothing planned"}</p>)}
       </details>}
       <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 12 }}>
         Suggestions use freezer batches first, then in-season saved meals matching Kitchen stock, unused proteins at home, and finally meals whose ingredients can be added to Shopping.
@@ -1474,6 +1487,7 @@ function PlanTab({ planWeekOf, previousWeekPlan, meals, selectedMealIds, plan, o
                   emptyMessage="No saved meals match"
                   defaultEmptyMessage="No meals ticked — search above"
                 />
+                <OneOffMealInput key={`${activeWeek}-${day}-${plan[day] ?? ""}`} day={day} currentValue={plan[day]} onSave={(value) => setDay(day, value)} />
               </div>
             </div>
           );

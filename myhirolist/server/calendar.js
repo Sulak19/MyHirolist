@@ -112,6 +112,10 @@ function mealNameFor(data, value) {
   const meal = asArray(data.mealPrep).find((item) => item.id === value);
   if (meal) return meal.name;
 
+  if (String(value).startsWith("one-off:")) {
+    try { return decodeURIComponent(String(value).slice(8)) || null; } catch { return null; }
+  }
+
   const proteinIdea = String(value).match(/^protein-idea:(.+)$/u)?.[1];
   return proteinIdea
     ? `${proteinIdea.replace(/-+/gu, " ").replace(/\b\p{L}/gu, (letter) => letter.toUpperCase())} dish`

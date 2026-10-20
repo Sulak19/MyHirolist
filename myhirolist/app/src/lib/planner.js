@@ -11,6 +11,7 @@
 // close enough for a household.
 
 import { availableIngredientMatches, dedupeShoppingItems, ingredientMatchesStock, ingredientRequirementKeys, itemKey, stockKeysForIngredient } from "./inventory.js";
+import { oneOffMealFromId } from "./oneOffMeal.js";
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
@@ -207,7 +208,8 @@ export function resolvePlanned(plan, meals, batches, inventory = []) {
       continue;
     }
     const meal = asArray(meals).find((m) => m.id === value)
-      || proteinMealIdeaFromId(value, inventory);
+      || proteinMealIdeaFromId(value, inventory)
+      || oneOffMealFromId(value);
     if (meal) resolved.push({ weekday, meal, batch: null });
   }
   return resolved;
