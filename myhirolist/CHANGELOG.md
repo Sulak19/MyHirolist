@@ -1,3 +1,9 @@
+## 1.0.68
+
+Merge pull request #55 from Sulak19/codex/typed-meal-plans
+
+Allow one-off meals to be typed into weekly plans
+
 ## 1.0.67
 
 Merge pull request #54 from Sulak19/codex/direct-dog-food-counts
