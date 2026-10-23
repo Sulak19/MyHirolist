@@ -107,6 +107,13 @@ test("a generic protein idea becomes a dinner event without a Saved Meal", () =>
   ]);
 });
 
+test("a typed one-off dinner becomes a calendar event", () => {
+  const data = { mealPrep: [], weekPlan: { Monday: "one-off:Salmon%20%26%20rice" } };
+  assert.deepEqual(planEvents(data, NOW), [
+    { key: "meal:2026-08-24", summary: "Dinner: Salmon & rice", date: "2026-08-24" },
+  ]);
+});
+
 test("food expiring within seven days is kept on Today as Use up", () => {
   const data = {
     inventory: [

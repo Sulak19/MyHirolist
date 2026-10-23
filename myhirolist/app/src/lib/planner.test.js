@@ -28,9 +28,21 @@ import {
   splitPrepNote,
   reconcilePrep,
   reconcileMealPlanLists,
+  resolvePlanned,
 } from "./planner.js";
+import { oneOffMealId, oneOffMealName } from "./oneOffMeal.js";
 
 const NOW = new Date(2026, 7, 26, 12).getTime();
+test("a typed one-off dinner survives planning and does not create ingredients", () => {
+  const id = oneOffMealId("  Mum's laksa & rice  ");
+  assert.equal(oneOffMealName(id), "Mum's laksa & rice");
+  const plan = { Monday: id };
+  assert.equal(resolvePlanned(plan, [], [])[0].meal.name, "Mum's laksa & rice");
+  assert.deepEqual(shoppingNeeds([{ plan, week: "this" }], [], [], []), []);
+  const filled = planWeek({ meals: [{ id: "saved", name: "Pasta", ingredients: [] }], existingPlan: plan, nowMs: NOW });
+  assert.equal(filled.Monday, id);
+  assert.equal(oneOffMealName("saved"), null);
+});
 const daysAgo = (n) => {
   const d = new Date(NOW - n * 86400000);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
